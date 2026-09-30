@@ -1,0 +1,7 @@
+{
+  "name": "Kasir - Kasir Digital Restoran & Kafe",
+  "description": "Aplikasi kasir (POS) modern untuk restoran dan kafe dengan manajemen menu, stok, multi-kasir, struk bon 3 rangkap, laporan penjualan, dan sinkronisasi Google Sheets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
