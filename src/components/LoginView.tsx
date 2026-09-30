@@ -9,6 +9,8 @@ interface LoginViewProps {
   namaToko: string;
 }
 
+const PIN_LENGTH = 6;
+
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }) => {
   const [username, setUsername] = useState(() => localStorage.getItem('kasir_last_username') || '');
   const [pin, setPin] = useState('');
@@ -22,7 +24,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }
     } catch {
       // ignore
     }
-    if (pin.length < 8) {
+    if (pin.length < PIN_LENGTH) {
       const newPin = pin + digit;
       setPin(newPin);
       setError('');
@@ -114,7 +116,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }
   ];
 
   return (
-    <div className="fixed inset-0 z-50 grid grid-cols-1 md:grid-cols-[1fr_1.1fr] bg-[#F1F3EF] min-h-screen">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-[#F1F3EF]">
+    <div className="grid grid-cols-1 md:grid-cols-[1fr_1.1fr] min-h-full">
       {/* Brand Pane */}
       <div className="bg-[#12241E] text-[#F3EBDD] p-8 md:p-14 flex flex-col justify-between relative overflow-hidden">
         <div className="flex items-center gap-3">
@@ -145,7 +148,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }
       </div>
 
       {/* Phone PIN Pad Form Pane */}
-      <div className="flex flex-col items-center justify-center p-6 md:p-10 overflow-y-auto">
+      <div className="flex flex-col items-center justify-center p-6 pb-10 md:p-10">
         <div className="w-full max-w-[340px] flex flex-col items-center">
           {/* Header */}
           <div className="text-center mb-5">
@@ -156,7 +159,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }
               Masuk ke Kasir
             </h2>
             <p className="text-xs text-[#56635B] mt-0.5">
-              Ketik username, lalu masukkan PIN angka
+              Ketik username, lalu masukkan 6 angka PIN
             </p>
           </div>
 
@@ -187,8 +190,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }
           </div>
 
           {/* Phone PIN Indicator Dots (like smartphone lock screen) */}
-          <div className="flex items-center justify-center gap-3 my-2 mb-4">
-            {Array.from({ length: Math.max(4, pin.length) }, (_, i) => i).map(idx => {
+          <div className="flex items-center justify-center gap-2.5 my-2 mb-4">
+            {Array.from({ length: PIN_LENGTH }, (_, i) => i).map(idx => {
               const isFilled = idx < pin.length;
               return (
                 <div
@@ -214,7 +217,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }
           )}
 
           {/* Numeric Phone Keypad Grid */}
-          <div className="w-full grid grid-cols-3 gap-3 mb-4">
+          <div className="w-full grid grid-cols-3 gap-2.5 sm:gap-3 mb-4">
             {keypadRows.flat().map(val => {
               if (val === 'C') {
                 return (
@@ -222,7 +225,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }
                     key="clear"
                     type="button"
                     onClick={handleClear}
-                    className="h-14 rounded-2xl bg-white/70 hover:bg-white text-xs font-bold text-[#A8392F] border border-[#D8DED6] active:scale-95 transition-all cursor-pointer shadow-2xs flex items-center justify-center"
+                    className="h-12 sm:h-14 rounded-2xl bg-white/70 hover:bg-white text-xs font-bold text-[#A8392F] border border-[#D8DED6] active:scale-95 transition-all cursor-pointer shadow-2xs flex items-center justify-center"
                     title="Hapus semua"
                   >
                     CLEAR
@@ -236,7 +239,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }
                     key="backspace"
                     type="button"
                     onClick={handleBackspace}
-                    className="h-14 rounded-2xl bg-white/70 hover:bg-white text-[#56635B] hover:text-[#1B2521] border border-[#D8DED6] active:scale-95 transition-all cursor-pointer shadow-2xs flex items-center justify-center"
+                    className="h-12 sm:h-14 rounded-2xl bg-white/70 hover:bg-white text-[#56635B] hover:text-[#1B2521] border border-[#D8DED6] active:scale-95 transition-all cursor-pointer shadow-2xs flex items-center justify-center"
                     title="Hapus satu angka"
                   >
                     <Delete className="w-5 h-5" />
@@ -249,7 +252,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }
                   key={val}
                   type="button"
                   onClick={() => handleDigitPress(val)}
-                  className="h-14 rounded-2xl bg-white hover:bg-gray-50 active:bg-gray-100 text-[#1B2521] font-serif font-bold text-2xl border border-[#D8DED6] active:scale-95 transition-all cursor-pointer shadow-2xs flex items-center justify-center select-none"
+                  className="h-12 sm:h-14 rounded-2xl bg-white hover:bg-gray-50 active:bg-gray-100 text-[#1B2521] font-serif font-bold text-2xl border border-[#D8DED6] active:scale-95 transition-all cursor-pointer shadow-2xs flex items-center justify-center select-none"
                 >
                   {val}
                 </button>
@@ -261,7 +264,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }
           <button
             type="button"
             onClick={() => submitLogin()}
-            disabled={loading || pin.length === 0 || username.trim().length === 0}
+            disabled={loading || pin.length !== PIN_LENGTH || username.trim().length === 0}
             className="w-full py-3.5 px-4 rounded-2xl bg-[#1F4034] hover:bg-[#2B5646] active:scale-[0.98] text-[#F3EBDD] font-bold text-sm tracking-wide transition-all shadow-md disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
           >
             <span>{loading ? 'Memverifikasi...' : 'Buka Kasir'}</span>
@@ -269,6 +272,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }
           </button>
         </div>
       </div>
+    </div>
     </div>
   );
 };
