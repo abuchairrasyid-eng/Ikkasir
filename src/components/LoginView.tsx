@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { User } from '../types';
 import { ApiClient } from '../services/api';
 import { playTapSound } from '../services/storage';
-import { ShieldCheck, UserCheck, Delete, ArrowRight, Lock } from 'lucide-react';
+import { Delete, ArrowRight, Lock } from 'lucide-react';
 
 interface LoginViewProps {
   onLoginSuccess: (user: User) => void;
@@ -10,7 +10,7 @@ interface LoginViewProps {
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }) => {
-  const [selectedRole, setSelectedRole] = useState<'owner' | 'kasir'>('owner');
+  const [username, setUsername] = useState(() => localStorage.getItem('kasir_last_username') || '');
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -46,6 +46,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }
 
   const submitLogin = useCallback(async (pinToUse?: string) => {
     const currentPin = pinToUse !== undefined ? pinToUse : pin;
+    const namaUser = username.trim();
+    if (!namaUser) {
+      setError('Masukkan username Anda.');
+      return;
+    }
     if (!currentPin) {
       setError('Masukkan angka PIN.');
       return;
@@ -56,20 +61,23 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }
 
     try {
       const res = await ApiClient.fetchWithCloudFallback<User>('login', {
-        username: selectedRole,
+        username: namaUser,
         password: currentPin,
       });
 
       if (!res.ok) {
-        setError(res.error || 'PIN yang Anda masukkan salah.');
+        setError(res.error || 'Username atau PIN salah.');
         setPin('');
       } else {
+        // Nama dan peran dibaca otomatis dari sheet User
+        const peranSheet = ((res.peran as string) || (res.data?.peran as string) || 'Kasir') as string;
         const loggedUser: User = {
-          id: (res.id as string) || (res.data?.id as string) || 'u-temp',
-          nama: (res.nama as string) || (res.data?.nama as string) || (selectedRole === 'owner' ? 'Rasyid Al-Farabi' : 'Siti Rahma'),
-          username: (res.username as string) || (res.data?.username as string) || selectedRole,
-          peran: ((res.peran as string) || (res.data?.peran as string) || (selectedRole === 'owner' ? 'Owner' : 'Kasir')) as 'Kasir' | 'Owner',
+          id: String((res.id as string) || (res.data?.id as string) || 'u-' + namaUser),
+          nama: (res.nama as string) || (res.data?.nama as string) || namaUser,
+          username: (res.username as string) || (res.data?.username as string) || namaUser,
+          peran: (peranSheet === 'Owner' ? 'Owner' : 'Kasir') as 'Kasir' | 'Owner',
         };
+        localStorage.setItem('kasir_last_username', namaUser);
         onLoginSuccess(loggedUser);
       }
     } catch (err: unknown) {
@@ -77,11 +85,13 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }
     } finally {
       setLoading(false);
     }
-  }, [pin, selectedRole, onLoginSuccess]);
+  }, [pin, username, onLoginSuccess]);
 
   // Listen for physical keyboard numeric input
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return; // sedang mengetik username
       if (e.key >= '0' && e.key <= '9') {
         handleDigitPress(e.key);
       } else if (e.key === 'Backspace') {
@@ -125,7 +135,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }
           </h1>
           <div className="w-14 h-[1px] bg-[#C2A06A] mt-6" />
           <p className="mt-4 text-[#9FB0A7] text-sm sm:text-base max-w-[32ch] font-normal leading-relaxed">
-            Masuk dengan PIN cepat seperti membuka ponsel untuk mulai melayani pelanggan.
+            Masuk dengan username dan PIN untuk mulai melayani pelanggan.
           </p>
         </div>
 
@@ -143,53 +153,42 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }
               <Lock className="w-6 h-6" />
             </div>
             <h2 className="font-serif font-bold text-2xl text-[#1B2521] tracking-tight">
-              Masukkan PIN Kasir
+              Masuk ke Kasir
             </h2>
             <p className="text-xs text-[#56635B] mt-0.5">
-              Pilih akun lalu ketik PIN angka seperti di HP
+              Ketik username, lalu masukkan PIN angka
             </p>
           </div>
 
-          {/* Account Selector Tabs */}
-          <div className="w-full grid grid-cols-2 p-1 bg-white border border-[#D8DED6] rounded-2xl mb-5 shadow-2xs">
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedRole('owner');
-                setPin('');
+          {/* Kolom Username (diketik sendiri; peran dibaca otomatis dari sheet) */}
+          <div className="w-full mb-5">
+            <label htmlFor="login-username" className="block text-[11px] font-bold text-[#56635B] uppercase mb-1">
+              Username
+            </label>
+            <input
+              id="login-username"
+              type="text"
+              value={username}
+              onChange={e => {
+                setUsername(e.target.value);
                 setError('');
               }}
-              className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                selectedRole === 'owner'
-                  ? 'bg-[#1F4034] text-[#F3EBDD] shadow-sm'
-                  : 'text-[#56635B] hover:text-[#1B2521]'
-              }`}
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-[#C2A06A]" />
-              <span>Owner</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedRole('kasir');
-                setPin('');
-                setError('');
+              onKeyDown={e => {
+                if (e.key === 'Enter') submitLogin();
               }}
-              className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                selectedRole === 'kasir'
-                  ? 'bg-[#1F4034] text-[#F3EBDD] shadow-sm'
-                  : 'text-[#56635B] hover:text-[#1B2521]'
-              }`}
-            >
-              <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Kasir</span>
-            </button>
+              placeholder="ketik username Anda"
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              autoFocus={!username}
+              className="w-full bg-white border border-[#D8DED6] rounded-2xl px-4 py-3 text-sm font-medium text-[#1B2521] outline-none focus:border-[#1F4034] shadow-2xs"
+            />
           </div>
 
           {/* Phone PIN Indicator Dots (like smartphone lock screen) */}
           <div className="flex items-center justify-center gap-3 my-2 mb-4">
-            {[0, 1, 2, 3].map(idx => {
+            {Array.from({ length: Math.max(4, pin.length) }, (_, i) => i).map(idx => {
               const isFilled = idx < pin.length;
               return (
                 <div
@@ -262,29 +261,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }
           <button
             type="button"
             onClick={() => submitLogin()}
-            disabled={loading || pin.length === 0}
+            disabled={loading || pin.length === 0 || username.trim().length === 0}
             className="w-full py-3.5 px-4 rounded-2xl bg-[#1F4034] hover:bg-[#2B5646] active:scale-[0.98] text-[#F3EBDD] font-bold text-sm tracking-wide transition-all shadow-md disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
           >
-            <span>{loading ? 'Memverifikasi PIN...' : 'Buka Kasir'}</span>
+            <span>{loading ? 'Memverifikasi...' : 'Buka Kasir'}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
-
-          {/* Quick Demo Help */}
-          <div className="mt-4 pt-3 border-t border-[#D8DED6] text-center w-full">
-            <span className="text-[11px] text-[#56635B]">
-              PIN bawaan demo:{' '}
-              <button
-                type="button"
-                onClick={() => {
-                  setPin('123');
-                  submitLogin('123');
-                }}
-                className="font-bold underline text-[#1F4034] cursor-pointer hover:text-black"
-              >
-                123
-              </button>
-            </span>
-          </div>
         </div>
       </div>
     </div>
