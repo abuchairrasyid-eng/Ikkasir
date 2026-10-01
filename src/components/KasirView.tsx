@@ -683,9 +683,7 @@ export const KasirView: React.FC<KasirViewProps> = ({
               Open Bill &amp; Meja Aktif ({openBills.length})
             </h2>
           </div>
-          <span className="text-xs text-[#56635B]">
-            Daftar tagihan meja aktif yang sedang berjalan
-          </span>
+
         </div>
 
         {openBills.length === 0 ? (
