@@ -32,9 +32,6 @@ interface KasirViewProps {
     }
   ) => void;
   onUpdateQty: (cartItemId: string, delta: number) => void;
-  heldOrders: Transaksi[];
-  onResumeHold: (id: string) => void;
-  onCancelHold: (id: string) => void;
   openBills?: Transaksi[];
   onResumeOpenBill?: (id: string) => void;
   onCancelOpenBill?: (id: string) => void;
@@ -49,9 +46,6 @@ export const KasirView: React.FC<KasirViewProps> = ({
   cart,
   onAddToCart,
   onUpdateQty,
-  heldOrders,
-  onResumeHold,
-  onCancelHold,
   openBills = [],
   onResumeOpenBill,
   onCancelOpenBill,
@@ -747,95 +741,16 @@ export const KasirView: React.FC<KasirViewProps> = ({
                   <div className="flex items-center gap-2 pt-2.5 border-t border-[#D8DED6]">
                     <button
                       type="button"
-                      onClick={() => (onResumeOpenBill ? onResumeOpenBill(t.id) : onResumeHold(t.id))}
+                      onClick={() => onResumeOpenBill?.(t.id)}
                       className="flex-1 py-2 rounded-xl bg-[#1F4034] text-[#F3EBDD] text-xs font-bold hover:bg-[#2B5646] cursor-pointer text-center active:scale-95 transition-all shadow-2xs"
                     >
                       Buka &amp; Bayar / Tambah Menu &rarr;
                     </button>
                     <button
                       type="button"
-                      onClick={() => (onCancelOpenBill ? onCancelOpenBill(t.id) : onCancelHold(t.id))}
+                      onClick={() => onCancelOpenBill?.(t.id)}
                       className="px-3 py-2 rounded-xl border border-red-200 text-[#A8392F] hover:bg-red-50 text-xs font-semibold cursor-pointer active:scale-95 transition-all"
                       title="Batalkan Open Bill ini"
-                    >
-                      Batal
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* Held Orders Section */}
-      <section className="mt-8 pt-6 border-t border-[#D8DED6]">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-[#94651B]" />
-            <h2 className="font-serif font-bold text-lg text-[#1B2521] m-0">
-              Pesanan Ditahan ({heldOrders.length})
-            </h2>
-          </div>
-          <span className="text-xs text-[#56635B]">
-            Simpan sementara pesanan tamu yang belum siap bayar
-          </span>
-        </div>
-
-        {heldOrders.length === 0 ? (
-          <div className="text-xs text-[#56635B] py-3.5 italic bg-[#FCFBF7] rounded-xl px-4 border border-[#D8DED6]/70">
-            Tidak ada pesanan yang sedang ditahan.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {heldOrders.map(t => {
-              const totalItems = t.items.reduce((s, it) => s + it.qty, 0);
-              return (
-                <div
-                  key={t.id}
-                  className="bg-[#FCFBF7] border border-[#D8DED6] hover:border-[#1F4034] rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-2xs transition-colors"
-                >
-                  <div>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <span className="font-bold text-sm text-[#1B2521]">
-                          {t.nomorMeja ? `${t.nomorMeja}` : t.id}
-                        </span>
-                        {t.namaPelanggan && (
-                          <span className="text-xs text-[#7C5E2E] font-medium ml-1">
-                            ({t.namaPelanggan})
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200 font-semibold">
-                        Ditahan
-                      </span>
-                    </div>
-                    <div className="text-xs text-[#56635B] mt-1 flex justify-between items-center">
-                      <span>Kasir: {t.kasir} &bull; {totalItems} item</span>
-                      <span className="text-xs text-[#94651B] font-mono font-medium">
-                        {formatTime(t.tanggal)}
-                      </span>
-                    </div>
-                    <div className="font-serif font-medium text-lg text-[#1B2521] mt-2">
-                      {formatRupiah(t.total)}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 pt-2.5 border-t border-[#D8DED6]">
-                    <button
-                      type="button"
-                      onClick={() => onResumeHold(t.id)}
-                      className="flex-1 py-2 rounded-xl bg-[#1F4034] text-[#F3EBDD] text-xs font-bold hover:bg-[#2B5646] cursor-pointer text-center active:scale-95 transition-all shadow-2xs flex items-center justify-center gap-1.5"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      <span>Selesaikan &amp; Bayar &rarr;</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onCancelHold(t.id)}
-                      className="px-3 py-2 rounded-xl border border-red-200 text-[#A8392F] hover:bg-red-50 text-xs font-semibold cursor-pointer active:scale-95 transition-all"
-                      title="Batalkan pesanan ditahan ini"
                     >
                       Batal
                     </button>

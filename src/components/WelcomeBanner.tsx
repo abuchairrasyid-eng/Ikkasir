@@ -41,7 +41,7 @@ export const WelcomeBanner: React.FC<WelcomeBannerProps> = ({ user, onDismiss })
 
   if (!user) return null;
 
-  const isOwner = user.peran === 'Owner';
+  const isOwner = user.peran === 'Owner' || user.peran === 'Admin';
 
   return (
     <div

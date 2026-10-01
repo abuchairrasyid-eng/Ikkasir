@@ -7,7 +7,6 @@ interface OrderPanelProps {
   cart: Record<string, CartItem>;
   onUpdateQty: (cartItemId: string, delta: number) => void;
   onClearCart: () => void;
-  onHoldOrder: () => void;
   onFinishOrder: (metode: PaymentMethod, diskon: number, bayar: number, kembalian: number) => void;
   isOpenMobile: boolean;
   onCloseMobile: () => void;
@@ -24,7 +23,6 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
   cart,
   onUpdateQty,
   onClearCart,
-  onHoldOrder,
   onFinishOrder,
   isOpenMobile,
   onCloseMobile,
@@ -94,19 +92,8 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
     setInputBayarRaw(cleanDigits);
   };
 
-  // Payment methods: QRIS is toggled by qrisEnabled setting
-  const paymentMethods: PaymentMethod[] = React.useMemo(() => {
-    const methods: PaymentMethod[] = ['Tunai'];
-    if (qrisEnabled !== false) methods.push('QRIS');
-    methods.push('Transfer', 'Kartu');
-    return methods;
-  }, [qrisEnabled]);
-
-  useEffect(() => {
-    if (qrisEnabled === false && metodeBayar === 'QRIS') {
-      setMetodeBayar('Tunai');
-    }
-  }, [qrisEnabled, metodeBayar]);
+  // Payment methods: Tunai, QRIS, Kartu (QRIS is always available to select)
+  const paymentMethods: PaymentMethod[] = ['Tunai', 'QRIS', 'Kartu'];
 
   return (
     <>
@@ -470,15 +457,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
               <span>{formatRupiah(totalAkhir)}</span>
             </button>
 
-            <div className="flex items-center justify-between pt-1 text-xs">
-              <button
-                type="button"
-                onClick={onHoldOrder}
-                disabled={items.length === 0}
-                className="text-[#1F4034] hover:underline underline-offset-4 font-semibold disabled:opacity-40 disabled:no-underline cursor-pointer"
-              >
-                Tahan Pesanan
-              </button>
+            <div className="flex items-center justify-end pt-1 text-xs">
               <button
                 type="button"
                 onClick={onClearCart}

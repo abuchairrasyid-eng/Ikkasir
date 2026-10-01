@@ -1,4 +1,4 @@
-export type Role = 'Kasir' | 'Owner';
+export type Role = 'Kasir' | 'Owner' | 'Admin';
 
 export type TemperatureOption = 'Dingin' | 'Panas';
 
@@ -34,7 +34,7 @@ export interface CartItem {
   catatan?: string;
 }
 
-export type PaymentMethod = 'Tunai' | 'Transfer' | 'QRIS' | 'Kartu';
+export type PaymentMethod = 'Tunai' | 'QRIS' | 'Kartu';
 
 export type TransactionStatus = 
   | 'Selesai' 
@@ -72,7 +72,11 @@ export interface AppConfig {
   mode: 'local' | 'cloud';
   soundEnabled: boolean;
   qrisEnabled?: boolean;
+  qrisBarcodeEnabled?: boolean; // false jika kasir memakai alat EDC/ADC fisik (langsung selesai tanpa muncul pop-up barcode QR)
+  qrisPopupEnabled?: boolean;
   diskonEnabled?: boolean;
+  bluetoothPrinterEnabled?: boolean; // Fitur printer termal bluetooth (bisa diaktifkan/nonaktifkan)
+  bluetoothDeviceName?: string;
 }
 
 export type ActiveView = 'kasir' | 'laporan' | 'produk' | 'akun';

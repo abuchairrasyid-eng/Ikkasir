@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Transaksi, User } from '../types';
+import { Transaksi, User, PaymentMethod } from '../types';
 import { formatRupiah, formatDateTime } from '../services/storage';
 import {
   Download,
@@ -12,6 +12,12 @@ import {
   FileSpreadsheet,
   AlertTriangle,
   UserCheck,
+  CreditCard,
+  QrCode,
+  Banknote,
+  BookmarkCheck,
+  TrendingUp,
+  Flame,
 } from 'lucide-react';
 
 interface LaporanViewProps {
@@ -20,6 +26,8 @@ interface LaporanViewProps {
   onBukaLaporSalahInput: (tx: Transaksi) => void;
   onKoreksi: (id: string) => void;
   onTolakKoreksi?: (id: string) => void;
+  onSelesaikanPesananDitahan?: (id: string, metode: PaymentMethod) => void;
+  onResumeHold?: (id: string) => void;
 }
 
 export const LaporanView: React.FC<LaporanViewProps> = ({
@@ -28,11 +36,23 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
   onBukaLaporSalahInput,
   onKoreksi,
   onTolakKoreksi,
+  onSelesaikanPesananDitahan,
+  onResumeHold,
 }) => {
-  const isOwner = user.peran === 'Owner';
+  const isOwner = user.peran === 'Owner' || user.peran === 'Admin';
   const [rangeMode, setRangeMode] = useState<'hari' | 'minggu' | 'bulan' | 'custom'>('hari');
   const [filterKasir, setFilterKasir] = useState<string>('');
-  const [hoveredPoint, setHoveredPoint] = useState<{ label: string; value: number; x: number; y: number } | null>(null);
+  const [hoveredPoint, setHoveredPoint] = useState<{
+    label: string;
+    value: number;
+    count?: number;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  // State for completing held transaction
+  const [completingTx, setCompletingTx] = useState<Transaksi | null>(null);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('Tunai');
 
   // Custom date range state
   const [customDari, setCustomDari] = useState('');
@@ -104,37 +124,172 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
   const jumlahTransaksi = countableTxs.length;
   const rataRata = jumlahTransaksi > 0 ? Math.round(totalPenjualan / jumlahTransaksi) : 0;
 
-  // Chart data
-  const chartPoints = useMemo(() => {
-    const map: Record<string, number> = {};
-    const sorted = [...countableTxs].sort((a, b) => new Date(a.tanggal).getTime() - new Date(b.tanggal).getTime());
+  // Laporan Metode Pembayaran (Breakdown Tunai, QRIS, Kartu)
+  const paymentBreakdown = useMemo(() => {
+    const data: Record<PaymentMethod, { count: number; total: number }> = {
+      Tunai: { count: 0, total: 0 },
+      QRIS: { count: 0, total: 0 },
+      Kartu: { count: 0, total: 0 },
+    };
 
-    sorted.forEach(t => {
-      const label = new Date(t.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
-      map[label] = (map[label] || 0) + t.total;
+    countableTxs.forEach(t => {
+      const m = (t.metodeBayar as PaymentMethod) || 'Tunai';
+      if (data[m]) {
+        data[m].count += 1;
+        data[m].total += t.total;
+      } else {
+        data['Tunai'].count += 1;
+        data['Tunai'].total += t.total;
+      }
     });
 
-    const entries = Object.entries(map);
-    if (entries.length === 0) return [];
+    const totalAll = totalPenjualan || 1;
+    return {
+      Tunai: {
+        ...data.Tunai,
+        percent: Math.round((data.Tunai.total / totalAll) * 100),
+      },
+      QRIS: {
+        ...data.QRIS,
+        percent: Math.round((data.QRIS.total / totalAll) * 100),
+      },
+      Kartu: {
+        ...data.Kartu,
+        percent: Math.round((data.Kartu.total / totalAll) * 100),
+      },
+    };
+  }, [countableTxs, totalPenjualan]);
 
-    const maxVal = Math.max(...entries.map(([, v]) => v), 1);
-    return entries.map(([label, value], idx) => {
-      const x = entries.length === 1 ? 50 : (idx / (entries.length - 1)) * 100;
-      const y = 100 - (value / maxVal) * 80;
-      return { label, value, x, y };
+  // Grafik Pesanan yang Sering Keluar (Menu Terlaris)
+  const topOrderedItems = useMemo(() => {
+    const map: Record<string, { nama: string; kategori: string; totalQty: number; totalOmzet: number }> = {};
+
+    countableTxs.forEach(t => {
+      t.items.forEach(item => {
+        const key = item.nama;
+        if (!map[key]) {
+          map[key] = {
+            nama: item.nama,
+            kategori: item.kategori || 'Menu',
+            totalQty: 0,
+            totalOmzet: 0,
+          };
+        }
+        map[key].totalQty += item.qty;
+        map[key].totalOmzet += item.qty * item.harga;
+      });
     });
+
+    const list = Object.values(map).sort((a, b) => b.totalQty - a.totalQty);
+    const maxQty = list.length > 0 ? list[0].totalQty : 1;
+
+    return {
+      items: list.slice(0, 6),
+      totalUniqueItems: list.length,
+      maxQty,
+    };
   }, [countableTxs]);
 
-  const polylineCoords = useMemo(() => {
-    return chartPoints.map(p => `${p.x},${p.y}`).join(' ');
-  }, [chartPoints]);
+  // Perbaikan Bug Grafik Tren Omzet Penjualan (Mendukung pola jam hari ini, multi-hari, hover tooltip)
+  const chartData = useMemo(() => {
+    if (countableTxs.length === 0) {
+      return { points: [], maxVal: 0, polyline: '', area: '', isHourly: false };
+    }
 
-  const areaCoords = useMemo(() => {
-    if (chartPoints.length === 0) return '';
-    const firstX = chartPoints[0].x;
-    const lastX = chartPoints[chartPoints.length - 1].x;
-    return `${firstX},100 ${polylineCoords} ${lastX},100`;
-  }, [chartPoints, polylineCoords]);
+    const sorted = [...countableTxs].sort(
+      (a, b) => new Date(a.tanggal).getTime() - new Date(b.tanggal).getTime()
+    );
+
+    // Jika 'hari' (Hari Ini) atau custom tanggal yang sama: kelompokkan per rentang jam
+    if (rangeMode === 'hari' || (rangeMode === 'custom' && customDari && customDari === customSampai)) {
+      const hourSlots = ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'];
+      const slotValues: Record<string, number> = {};
+      const slotCounts: Record<string, number> = {};
+      hourSlots.forEach(s => {
+        slotValues[s] = 0;
+        slotCounts[s] = 0;
+      });
+
+      sorted.forEach(t => {
+        const d = new Date(t.tanggal);
+        const h = d.getHours();
+        let matched = '08:00';
+        for (let i = 0; i < hourSlots.length; i++) {
+          const slotH = parseInt(hourSlots[i].split(':')[0], 10);
+          if (h <= slotH || i === hourSlots.length - 1) {
+            matched = hourSlots[i];
+            break;
+          }
+        }
+        slotValues[matched] = (slotValues[matched] || 0) + t.total;
+        slotCounts[matched] = (slotCounts[matched] || 0) + 1;
+      });
+
+      const maxVal = Math.max(...Object.values(slotValues), 1);
+      const points = hourSlots.map((slot, idx) => {
+        const val = slotValues[slot];
+        const x = (idx / (hourSlots.length - 1)) * 420 + 40;
+        const y = 160 - (val / maxVal) * 115;
+        return {
+          label: `Pukul ${slot}`,
+          displayLabel: slot,
+          value: val,
+          count: slotCounts[slot],
+          x,
+          y,
+        };
+      });
+
+      const polyline = points.map(p => `${p.x},${p.y}`).join(' ');
+      const area = `${points[0].x},165 ${polyline} ${points[points.length - 1].x},165`;
+
+      return { points, maxVal, polyline, area, isHourly: true };
+    }
+
+    // Untuk 'minggu', 'bulan', atau custom multi-hari: kelompokkan per tanggal
+    const dayMap: Record<string, { total: number; count: number }> = {};
+    sorted.forEach(t => {
+      const label = new Date(t.tanggal).toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'short',
+      });
+      if (!dayMap[label]) dayMap[label] = { total: 0, count: 0 };
+      dayMap[label].total += t.total;
+      dayMap[label].count += 1;
+    });
+
+    const entries = Object.entries(dayMap);
+    const maxVal = Math.max(...entries.map(([, v]) => v.total), 1);
+
+    let points: { label: string; displayLabel: string; value: number; count: number; x: number; y: number }[] = [];
+
+    if (entries.length === 1) {
+      const [label, data] = entries[0];
+      points = [
+        { label: 'Awal', displayLabel: '', value: 0, count: 0, x: 40, y: 160 },
+        { label, displayLabel: label, value: data.total, count: data.count, x: 250, y: 160 - (data.total / maxVal) * 115 },
+        { label: 'Akhir', displayLabel: '', value: 0, count: 0, x: 460, y: 160 },
+      ];
+    } else {
+      points = entries.map(([label, data], idx) => {
+        const x = (idx / (entries.length - 1)) * 420 + 40;
+        const y = 160 - (data.total / maxVal) * 115;
+        return {
+          label,
+          displayLabel: label,
+          value: data.total,
+          count: data.count,
+          x,
+          y,
+        };
+      });
+    }
+
+    const polyline = points.map(p => `${p.x},${p.y}`).join(' ');
+    const area = `${points[0].x},165 ${polyline} ${points[points.length - 1].x},165`;
+
+    return { points, maxVal, polyline, area, isHourly: false };
+  }, [countableTxs, rangeMode, customDari, customSampai]);
 
   // CSV Export
   const handleExportCsv = () => {
@@ -205,6 +360,20 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
         return <span className="text-[11px] text-gray-500">{status}</span>;
     }
   };
+
+  if (!isOwner) {
+    return (
+      <div className="p-8 sm:p-12 text-center bg-[#FCFBF7] rounded-3xl border border-[#D8DED6] shadow-sm max-w-lg mx-auto mt-12 space-y-3">
+        <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
+          <ShieldAlert className="w-6 h-6" />
+        </div>
+        <h2 className="font-serif font-bold text-xl text-[#1B2521]">Akses Laporan Dibatasi</h2>
+        <p className="text-xs text-[#56635B] leading-relaxed">
+          Laporan penjualan toko dan pembukuan hanya dapat diakses oleh akun <b>Admin / Owner</b>. Silakan masuk menggunakan akun yang berwenang.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 pb-16">
@@ -421,28 +590,297 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
         </div>
       </div>
 
-      {/* Chart Section */}
-      <div className="bg-[#FCFBF7] border border-[#D8DED6] rounded-2xl p-6 shadow-2xs space-y-3">
-        <h3 className="font-serif font-bold text-base text-[#1B2521] m-0">
-          Grafik Tren Omzet Penjualan
-        </h3>
-        <div className="h-44 w-full relative">
-          {chartPoints.length <= 1 ? (
-            <div className="h-full flex items-center justify-center text-xs text-gray-400 italic">
-              Data transaksi belum cukup untuk menampilkan tren grafik.
+      {/* Laporan Metode Pembayaran */}
+      <div className="bg-[#FCFBF7] border border-[#D8DED6] rounded-2xl p-5 shadow-2xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h3 className="font-serif font-bold text-base text-[#1B2521] m-0 flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-[#1F4034]" />
+              Laporan Metode Pembayaran
+            </h3>
+            <p className="text-xs text-[#56635B] mt-0.5">
+              Rincian omzet dan volume transaksi berdasarkan metode pembayaran yang digunakan pelanggan.
+            </p>
+          </div>
+          <div className="text-xs text-[#56635B] font-mono bg-white px-3 py-1 rounded-xl border border-[#D8DED6] self-start sm:self-auto">
+            Total Masuk: <b className="text-[#1F4034]">{formatRupiah(totalPenjualan)}</b>
+          </div>
+        </div>
+
+        {/* Multi-segment Share Bar */}
+        <div className="w-full h-3 rounded-full bg-gray-100 overflow-hidden flex shadow-inner">
+          <div
+            style={{ width: `${paymentBreakdown.Tunai.percent}%` }}
+            className="bg-emerald-600 transition-all duration-500"
+            title={`Tunai: ${paymentBreakdown.Tunai.percent}%`}
+          />
+          <div
+            style={{ width: `${paymentBreakdown.QRIS.percent}%` }}
+            className="bg-amber-500 transition-all duration-500"
+            title={`QRIS: ${paymentBreakdown.QRIS.percent}%`}
+          />
+          <div
+            style={{ width: `${paymentBreakdown.Kartu.percent}%` }}
+            className="bg-indigo-600 transition-all duration-500"
+            title={`Kartu: ${paymentBreakdown.Kartu.percent}%`}
+          />
+        </div>
+
+        {/* 3 Columns Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Tunai */}
+          <div className="p-3.5 rounded-xl bg-white border border-[#D8DED6] flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+                <Banknote className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block">
+                  Tunai (Cash)
+                </span>
+                <span className="font-serif font-bold text-base text-[#1B2521] font-mono">
+                  {formatRupiah(paymentBreakdown.Tunai.total)}
+                </span>
+                <span className="text-[10px] text-gray-500 block">
+                  {paymentBreakdown.Tunai.count} transaksi
+                </span>
+              </div>
             </div>
-          ) : (
-            <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#C2A06A" stopOpacity="0.35" />
-                  <stop offset="100%" stopColor="#C2A06A" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              <polygon points={areaCoords} fill="url(#chartGrad)" />
-              <polyline points={polylineCoords} fill="none" stroke="#1F4034" strokeWidth="2.5" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          )}
+            <div className="text-right">
+              <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                {paymentBreakdown.Tunai.percent}%
+              </span>
+            </div>
+          </div>
+
+          {/* QRIS */}
+          <div className="p-3.5 rounded-xl bg-white border border-[#D8DED6] flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
+                <QrCode className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wider block">
+                  QRIS (Digital)
+                </span>
+                <span className="font-serif font-bold text-base text-[#1B2521] font-mono">
+                  {formatRupiah(paymentBreakdown.QRIS.total)}
+                </span>
+                <span className="text-[10px] text-gray-500 block">
+                  {paymentBreakdown.QRIS.count} transaksi
+                </span>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                {paymentBreakdown.QRIS.percent}%
+              </span>
+            </div>
+          </div>
+
+          {/* Kartu */}
+          <div className="p-3.5 rounded-xl bg-white border border-[#D8DED6] flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold">
+                <CreditCard className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[11px] font-bold text-indigo-800 uppercase tracking-wider block">
+                  Kartu (EDC)
+                </span>
+                <span className="font-serif font-bold text-base text-[#1B2521] font-mono">
+                  {formatRupiah(paymentBreakdown.Kartu.total)}
+                </span>
+                <span className="text-[10px] text-gray-500 block">
+                  {paymentBreakdown.Kartu.count} transaksi
+                </span>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
+                {paymentBreakdown.Kartu.percent}%
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Grid 2 Kolom: Grafik Tren Omzet & Grafik Pesanan Sering Keluar */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Kolom 1: Grafik Tren Omzet Penjualan (Bug Fixed) */}
+        <div className="bg-[#FCFBF7] border border-[#D8DED6] rounded-2xl p-5 shadow-2xs space-y-3 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-serif font-bold text-base text-[#1B2521] m-0 flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-[#1F4034]" />
+                Grafik Tren Omzet Penjualan
+              </h3>
+              <p className="text-xs text-[#56635B] mt-0.5">
+                {chartData.isHourly ? 'Pola penjualan per jam (Hari Ini)' : 'Grafik omzet harian'}
+              </p>
+            </div>
+            {chartData.maxVal > 0 && (
+              <span className="text-[11px] text-[#7C5E2E] font-mono bg-[#EBE3D3]/50 px-2 py-0.5 rounded-lg">
+                Puncak: {formatRupiah(chartData.maxVal)}
+              </span>
+            )}
+          </div>
+
+          <div className="h-52 w-full relative pt-2">
+            {chartData.points.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-xs text-gray-400 italic">
+                Belum ada transaksi selesai pada periode ini untuk ditampilkan pada grafik.
+              </div>
+            ) : (
+              <>
+                <svg
+                  className="w-full h-full overflow-visible"
+                  viewBox="0 0 500 200"
+                  preserveAspectRatio="none"
+                >
+                  <defs>
+                    <linearGradient id="chartGradFixed" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#C2A06A" stopOpacity="0.4" />
+                      <stop offset="100%" stopColor="#C2A06A" stopOpacity="0.02" />
+                    </linearGradient>
+                  </defs>
+
+                  {/* Horizontal Guide Lines */}
+                  <line x1="40" y1="45" x2="460" y2="45" stroke="#E5E9E2" strokeDasharray="3 3" />
+                  <line x1="40" y1="102" x2="460" y2="102" stroke="#E5E9E2" strokeDasharray="3 3" />
+                  <line x1="40" y1="160" x2="460" y2="160" stroke="#D8DED6" strokeWidth="1.5" />
+
+                  {/* Area Polygon */}
+                  <polygon points={chartData.area} fill="url(#chartGradFixed)" />
+
+                  {/* Polyline Stroke */}
+                  <polyline
+                    points={chartData.polyline}
+                    fill="none"
+                    stroke="#1F4034"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+
+                  {/* Interactive Circles & X-axis Labels */}
+                  {chartData.points.map((p, i) => (
+                    <g key={i}>
+                      <circle
+                        cx={p.x}
+                        cy={p.y}
+                        r="4.5"
+                        fill="#FCFBF7"
+                        stroke="#1F4034"
+                        strokeWidth="2.5"
+                        className="cursor-pointer transition-transform hover:scale-150"
+                        onMouseEnter={() => setHoveredPoint(p)}
+                        onMouseLeave={() => setHoveredPoint(null)}
+                      />
+                      {p.displayLabel && (
+                        <text
+                          x={p.x}
+                          y="185"
+                          textAnchor="middle"
+                          fill="#56635B"
+                          fontSize="11"
+                          fontFamily="sans-serif"
+                        >
+                          {p.displayLabel}
+                        </text>
+                      )}
+                    </g>
+                  ))}
+                </svg>
+
+                {/* Hover Tooltip Popup */}
+                {hoveredPoint && (
+                  <div
+                    className="absolute z-20 pointer-events-none bg-[#12241E] text-white text-[11px] p-2 rounded-xl shadow-lg border border-[#C2A06A]/40 transform -translate-x-1/2 -translate-y-full animate-fade-in"
+                    style={{
+                      left: `${(hoveredPoint.x / 500) * 100}%`,
+                      top: `${(hoveredPoint.y / 200) * 100}%`,
+                      marginTop: '-8px',
+                    }}
+                  >
+                    <div className="font-bold text-[#C2A06A]">{hoveredPoint.label}</div>
+                    <div className="font-mono text-xs">{formatRupiah(hoveredPoint.value)}</div>
+                    {hoveredPoint.count !== undefined && hoveredPoint.count > 0 && (
+                      <div className="text-[10px] text-gray-300">{hoveredPoint.count} transaksi</div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Kolom 2: Grafik Pesanan yang Sering Keluar (Menu Terlaris) */}
+        <div className="bg-[#FCFBF7] border border-[#D8DED6] rounded-2xl p-5 shadow-2xs space-y-3 flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-serif font-bold text-base text-[#1B2521] m-0 flex items-center gap-2">
+                <Flame className="w-4 h-4 text-amber-600" />
+                Pesanan yang Sering Keluar
+              </h3>
+              <p className="text-xs text-[#56635B] mt-0.5">
+                Peringkat menu paling banyak dipesan pada periode terpilih
+              </p>
+            </div>
+            <span className="text-[11px] text-[#1F4034] font-medium bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
+              {topOrderedItems.items.length} Menu Teratas
+            </span>
+          </div>
+
+          <div className="space-y-2.5 pt-1">
+            {topOrderedItems.items.length === 0 ? (
+              <div className="h-44 flex items-center justify-center text-xs text-gray-400 italic">
+                Belum ada pesanan menu pada periode ini.
+              </div>
+            ) : (
+              topOrderedItems.items.map((item, idx) => {
+                const percent = Math.round((item.totalQty / topOrderedItems.maxQty) * 100);
+                const rankBadges = [
+                  'bg-[#C2A06A] text-white', // #1 Emas
+                  'bg-slate-400 text-white', // #2 Perak
+                  'bg-amber-700 text-white', // #3 Perunggu
+                  'bg-gray-200 text-gray-700',
+                  'bg-gray-200 text-gray-700',
+                  'bg-gray-200 text-gray-700',
+                ];
+
+                return (
+                  <div key={item.nama} className="p-2.5 rounded-xl bg-white border border-[#D8DED6] space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-5 h-5 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 ${rankBadges[idx] || rankBadges[3]}`}>
+                          #{idx + 1}
+                        </span>
+                        <div>
+                          <span className="font-bold text-[#1B2521]">{item.nama}</span>
+                          <span className="text-[10px] text-gray-400 ml-1.5">({item.kategori})</span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-bold text-[#1F4034] font-mono">{item.totalQty} terjual</span>
+                        <span className="text-[10px] text-gray-500 block font-mono">{formatRupiah(item.totalOmzet)}</span>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        style={{ width: `${percent}%` }}
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          idx === 0 ? 'bg-[#C2A06A]' : 'bg-[#1F4034]'
+                        }`}
+                      />
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       </div>
 
@@ -508,7 +946,7 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
                         )}
                       </td>
                       <td className="p-3.5 pr-5 text-right">
-                        {/* Lapor Salah Input Button */}
+                        {/* Lapor Salah Input Button for Selesai */}
                         {t.status === 'Selesai' && (
                           <button
                             type="button"
@@ -518,6 +956,35 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
                             <AlertCircle className="w-3.5 h-3.5" />
                             <span>Lapor Salah Input</span>
                           </button>
+                        )}
+
+                        {/* Selesaikan Pesanan Ditahan / Open Bill jika pelanggan sudah bayar */}
+                        {(t.status === 'Ditahan' || t.status === 'OpenBill') && (
+                          <div className="inline-flex items-center gap-1.5 justify-end">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCompletingTx(t);
+                                setSelectedPaymentMethod('Tunai');
+                              }}
+                              className="px-2.5 py-1.5 rounded-xl bg-[#1F4034] hover:bg-[#2B5646] text-white font-bold text-xs cursor-pointer active:scale-95 shadow-2xs inline-flex items-center gap-1"
+                              title="Pelanggan bayar, selesaikan pesanan sekarang"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>Selesaikan Pesanan</span>
+                            </button>
+
+                            {onResumeHold && (
+                              <button
+                                type="button"
+                                onClick={() => onResumeHold(t.id)}
+                                className="px-2 py-1.5 rounded-xl border border-[#D8DED6] hover:bg-white text-gray-700 text-xs font-medium cursor-pointer"
+                                title="Buka kembali di Kasir untuk tambah item atau bayar"
+                              >
+                                Ke Kasir
+                              </button>
+                            )}
+                          </div>
                         )}
 
                         {/* Owner ACC Actions if MenungguKoreksi */}
@@ -557,6 +1024,107 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* MODAL SELESAIKAN PESANAN DITAHAN (BAYAR & LUNAS) */}
+      {completingTx && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-[#FCFBF7] rounded-3xl w-full max-w-md shadow-2xl border border-[#D8DED6] overflow-hidden flex flex-col animate-spring-up">
+            <div className="p-5 border-b border-[#D8DED6] flex items-center justify-between bg-[#12241E] text-[#F3EBDD]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-[#C2A06A] text-[#12241E] flex items-center justify-center font-bold">
+                  <BookmarkCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-serif font-bold text-base text-[#F3EBDD] leading-tight">
+                    Selesaikan Pembayaran Pesanan
+                  </h3>
+                  <div className="text-[11px] text-[#C2A06A] font-mono">
+                    ID: {completingTx.id} &bull; {completingTx.namaPelanggan ? `Tamu: ${completingTx.namaPelanggan}` : completingTx.nomorMeja || 'Pesanan Ditahan'}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCompletingTx(null)}
+                className="text-white/70 hover:text-white p-1 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Order Summary Box */}
+              <div className="p-3.5 rounded-2xl bg-white border border-[#D8DED6] space-y-2">
+                <div className="flex items-center justify-between text-xs text-[#56635B]">
+                  <span>Total Tagihan:</span>
+                  <span className="font-serif font-bold text-base text-[#1F4034] font-mono">
+                    {formatRupiah(completingTx.total)}
+                  </span>
+                </div>
+                <div className="text-[11px] text-gray-500 pt-1 border-t border-dashed border-[#D8DED6]">
+                  {completingTx.items.map(i => `${i.nama} (x${i.qty})`).join(', ')}
+                </div>
+              </div>
+
+              {/* Pilih Metode Pembayaran */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-[#56635B] uppercase tracking-wider">
+                  Pilih Metode Pembayaran:
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['Tunai', 'QRIS', 'Kartu'] as PaymentMethod[]).map(method => (
+                    <button
+                      key={method}
+                      type="button"
+                      onClick={() => setSelectedPaymentMethod(method)}
+                      className={`p-3 rounded-2xl border text-xs font-bold transition-all cursor-pointer flex flex-col items-center justify-center gap-1.5 ${
+                        selectedPaymentMethod === method
+                          ? 'bg-[#1F4034] text-[#F3EBDD] border-[#1F4034] shadow-sm ring-2 ring-[#C2A06A]'
+                          : 'bg-white text-gray-700 border-[#D8DED6] hover:border-gray-400'
+                      }`}
+                    >
+                      {method === 'Tunai' && <Banknote className="w-4 h-4" />}
+                      {method === 'QRIS' && <QrCode className="w-4 h-4" />}
+                      {method === 'Kartu' && <CreditCard className="w-4 h-4" />}
+                      <span>{method}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-between gap-2">
+                {onResumeHold && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const id = completingTx.id;
+                      setCompletingTx(null);
+                      onResumeHold(id);
+                    }}
+                    className="px-3 py-2.5 rounded-xl border border-[#D8DED6] hover:bg-gray-100 text-xs font-semibold text-gray-700 cursor-pointer"
+                  >
+                    Buka di Kasir
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onSelesaikanPesananDitahan) {
+                      onSelesaikanPesananDitahan(completingTx.id, selectedPaymentMethod);
+                    }
+                    setCompletingTx(null);
+                  }}
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs transition-all shadow-sm cursor-pointer flex items-center justify-center gap-1.5 active:scale-95"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Konfirmasi Pembayaran Selesai</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

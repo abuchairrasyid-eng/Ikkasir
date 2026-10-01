@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { User, Produk, Transaksi, CartItem, ActiveView, AppConfig, PaymentMethod, Role, TemperatureOption } from './types';
 import { CloudSync } from './services/cloud';
+import { SyncBadge } from './components/SyncBadge';
 import { StorageService, formatRupiah, playCashRegisterSound, playTapSound } from './services/storage';
 import { LoginView } from './components/LoginView';
 import { SidebarRail } from './components/SidebarRail';
@@ -212,61 +213,6 @@ export default function App() {
     showToast('Pesanan dikosongkan.');
   };
 
-  // Hold current order
-  const handleHoldOrder = () => {
-    if (!user) return;
-    const items = Object.values(cart);
-    if (items.length === 0) return;
-
-    const subtotal = items.reduce((s, it) => s + it.harga * it.qty, 0);
-    const saved = StorageService.addTransaksi({
-      kasir: user.nama,
-      items,
-      diskon: 0,
-      metodeBayar: 'Tunai',
-      total: subtotal,
-      bayar: 0,
-      kembalian: 0,
-      status: 'Ditahan',
-    });
-
-    setCart({});
-    setResumedTxId(null);
-    setIsOrderPanelOpenMobile(false);
-    reloadData();
-    showToast(`Pesanan ${saved.id} berhasil ditahan.`);
-  };
-
-  // Resume a held order (kasir can directly complete it)
-  const handleResumeHold = (id: string) => {
-    const items = StorageService.lanjutkanTahan(id);
-    if (!items) {
-      showToast('Gagal memulihkan pesanan.');
-      return;
-    }
-
-    const newCart: Record<string, CartItem> = {};
-    items.forEach(it => {
-      const key = it.cartItemId || it.id;
-      newCart[key] = { ...it, cartItemId: key };
-    });
-
-    setCart(newCart);
-    setResumedTxId(id);
-    reloadData();
-    setActiveView('kasir');
-    setIsOrderPanelOpenMobile(true);
-    showToast(`Pesanan ditahan ${id} siap diselesaikan di kasir.`);
-  };
-
-  // Cancel a held order
-  const handleCancelHold = (id: string) => {
-    StorageService.koreksiTransaksi(id);
-    if (resumedTxId === id) setResumedTxId(null);
-    reloadData();
-    showToast(`Pesanan ditahan ${id} dibatalkan.`);
-  };
-
   // Split bill confirmation
   const handleConfirmSplitBill = (splits: { orang: number; perOrang: number; metode: PaymentMethod }[]) => {
     if (!user) return;
@@ -333,18 +279,28 @@ export default function App() {
     if (items.length === 0) return;
 
     const subtotal = items.reduce((s, it) => s + it.harga * it.qty, 0);
-    const saved = StorageService.addTransaksi({
-      kasir: user.nama,
-      items,
-      diskon: 0,
-      metodeBayar: 'Tunai',
-      total: subtotal,
-      bayar: 0,
-      kembalian: 0,
-      status: 'OpenBill',
-      namaPelanggan: data.namaPelanggan,
-      catatan: data.catatan,
-    });
+    // Jika ini Open Bill yang dibuka kembali, perbarui nota yang sama (jangan buat nota baru)
+    const saved =
+      (resumedTxId &&
+        StorageService.updateTransaksi(resumedTxId, {
+          items,
+          total: subtotal,
+          status: 'OpenBill',
+          namaPelanggan: data.namaPelanggan,
+          catatan: data.catatan,
+        })) ||
+      StorageService.addTransaksi({
+        kasir: user.nama,
+        items,
+        diskon: 0,
+        metodeBayar: 'Tunai',
+        total: subtotal,
+        bayar: 0,
+        kembalian: 0,
+        status: 'OpenBill',
+        namaPelanggan: data.namaPelanggan,
+        catatan: data.catatan,
+      });
 
     setCart({});
     setResumedTxId(null);
@@ -427,7 +383,9 @@ export default function App() {
     bayar: number,
     kembalian: number
   ) => {
-    if (metode === 'QRIS') {
+    // If barcode is disabled (e.g. cashier uses EDC / ADC device / standee), finish directly without QR pop-up
+    const showBarcode = Boolean(config.qrisBarcodeEnabled ?? config.qrisPopupEnabled ?? false);
+    if (metode === 'QRIS' && showBarcode) {
       setQrisPending({ diskon, bayar, kembalian });
     } else {
       executeOrderCompletion(metode, diskon, bayar, kembalian);
@@ -524,16 +482,37 @@ export default function App() {
       newCart[key] = { ...it, cartItemId: key };
     });
     setCart(newCart);
+    setResumedTxId(id); // pembayaran nanti memperbarui nota yang sama, bukan membuat nota baru
     reloadData();
     setActiveView('kasir');
     setIsOrderPanelOpenMobile(true);
-    showToast(`Open Bill ${data.nomorMeja || id} dibuka ke keranjang.`);
+    showToast(`Open Bill ${data.namaPelanggan || data.nomorMeja || id} dibuka ke keranjang.`);
   };
 
   const handleCancelOpenBill = (id: string) => {
     StorageService.batalkanOpenBill(id);
+    if (resumedTxId === id) {
+      setResumedTxId(null);
+      setCart({});
+    }
     reloadData();
     showToast(`Open Bill ${id} dibatalkan.`);
+  };
+
+  // Complete held / open bill order from report history when paid
+  const handleSelesaikanPesananDitahan = (id: string, metode: PaymentMethod) => {
+    const ok = StorageService.selesaikanTahan(id, metode);
+    if (ok) {
+      if (resumedTxId === id) {
+        setResumedTxId(null);
+        setCart({});
+      }
+      reloadData();
+      showToast(`Pesanan #${id} berhasil diselesaikan (${metode}).`);
+      if (config.soundEnabled) playCashRegisterSound();
+    } else {
+      showToast('Gagal menyelesaikan pesanan.');
+    }
   };
 
   // Config update
@@ -570,17 +549,22 @@ export default function App() {
     return Object.values(cart).reduce((sum, it) => sum + it.harga * it.qty, 0);
   }, [cart]);
 
-  const heldOrders = useMemo(() => {
-    return transaksi.filter(t => t.status === 'Ditahan');
-  }, [transaksi]);
-
+  // Open Bill = pesanan yang sudah dilayani tetapi belum dibayar.
+  // Status 'Ditahan' (fitur lama) tetap ditampilkan di sini agar data lama tidak hilang.
   const openBills = useMemo(() => {
-    return transaksi.filter(t => t.status === 'OpenBill');
+    return transaksi.filter(t => t.status === 'OpenBill' || t.status === 'Ditahan');
   }, [transaksi]);
 
   const pendingAccCount = useMemo(() => {
     return transaksi.filter(t => t.status === 'MenungguKoreksi').length;
   }, [transaksi]);
+
+  // Guard: akun staf/kasir otomatis dialihkan ke tab kasir jika mencoba membuka tab admin
+  useEffect(() => {
+    if (user && user.peran === 'Kasir' && activeView !== 'kasir') {
+      setActiveView('kasir');
+    }
+  }, [user, activeView]);
 
   // If not logged in, show Login view
   if (!user) {
@@ -624,30 +608,29 @@ export default function App() {
               cart={cart}
               onAddToCart={handleAddToCart}
               onUpdateQty={handleUpdateQty}
-              heldOrders={heldOrders}
-              onResumeHold={handleResumeHold}
-              onCancelHold={handleCancelHold}
               openBills={openBills}
               onResumeOpenBill={handleResumeOpenBill}
               onCancelOpenBill={handleCancelOpenBill}
-              recentTransactions={transaksi.filter(t => user.peran === 'Owner' || t.kasir === user.nama)}
+              recentTransactions={transaksi.filter(t => user.peran === 'Owner' || user.peran === 'Admin' || t.kasir === user.nama)}
               onBukaLaporSalahInput={tx => setSelectedTxForSalahInput(tx)}
               user={user}
               lastAddedId={lastAddedId}
             />
           )}
 
-          {activeView === 'laporan' && (
+          {activeView === 'laporan' && (user.peran === 'Owner' || user.peran === 'Admin') && (
             <LaporanView
               transaksi={transaksi}
               user={user}
               onBukaLaporSalahInput={tx => setSelectedTxForSalahInput(tx)}
               onKoreksi={handleKoreksi}
               onTolakKoreksi={handleTolakKoreksi}
+              onSelesaikanPesananDitahan={handleSelesaikanPesananDitahan}
+              onResumeHold={handleResumeOpenBill}
             />
           )}
 
-          {activeView === 'produk' && user.peran === 'Owner' && (
+          {activeView === 'produk' && (user.peran === 'Owner' || user.peran === 'Admin') && (
             <ProdukView
               produk={produk}
               onAddProduk={handleAddProduk}
@@ -657,7 +640,7 @@ export default function App() {
             />
           )}
 
-          {activeView === 'akun' && user.peran === 'Owner' && (
+          {activeView === 'akun' && (user.peran === 'Owner' || user.peran === 'Admin') && (
             <AkunView
               users={users}
               currentUser={user}
@@ -674,7 +657,6 @@ export default function App() {
           cart={cart}
           onUpdateQty={handleUpdateQty}
           onClearCart={handleClearCart}
-          onHoldOrder={handleHoldOrder}
           onFinishOrder={handleFinishOrder}
           isOpenMobile={isOrderPanelOpenMobile}
           onCloseMobile={() => setIsOrderPanelOpenMobile(false)}
@@ -761,6 +743,7 @@ export default function App() {
       <ReceiptModal
         transaksi={receiptModalTx}
         namaToko={config.namaToko}
+        bluetoothPrinterEnabled={config.bluetoothPrinterEnabled}
         onClose={() => setReceiptModalTx(null)}
       />
 
@@ -776,6 +759,8 @@ export default function App() {
           onCancel={() => setQrisPending(null)}
         />
       )}
+
+      <SyncBadge />
 
       {/* Toast Notification */}
       <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />

@@ -1,5 +1,5 @@
 import { StorageService } from './storage';
-import { User, Produk, Transaksi, CartItem } from '../types';
+import { User, Produk, Transaksi, CartItem, PaymentMethod, Role } from '../types';
 
 export interface ApiResponse<T = unknown> {
   ok: boolean;
@@ -217,7 +217,7 @@ export const ApiClient = {
           kasir: string;
           items: CartItem[];
           diskon: number;
-          metodeBayar: 'Tunai' | 'Transfer' | 'QRIS' | 'Kartu';
+          metodeBayar: PaymentMethod;
           total: number;
           bayar: number;
           kembalian: number;
@@ -267,7 +267,7 @@ export const ApiClient = {
           nama: string;
           username: string;
           password?: string;
-          peran: 'Kasir' | 'Owner';
+          peran: Role;
         };
         const user = StorageService.addUser({
           nama: p.nama,

@@ -6,7 +6,6 @@ import {
   Image as ImageIcon,
   Search,
   Utensils,
-  Sparkles,
   ThermometerSnowflake,
   Star,
   Edit2,
@@ -34,15 +33,6 @@ interface ProdukViewProps {
   onUpdateProduk?: (id: string, updates: Partial<Produk>) => void;
   onDeleteProduk?: (id: string) => void;
   onToggleAktif: (id: string) => void;
-}
-
-interface MenuPreset {
-  nama: string;
-  harga: number;
-  kategori: string;
-  adaPilihanSuhu: boolean;
-  deskripsi?: string;
-  favorit?: boolean;
 }
 
 // Terbilang Rupiah Helper (e.g. 25000 -> Dua Puluh Lima Ribu Rupiah)
@@ -89,9 +79,6 @@ export const ProdukView: React.FC<ProdukViewProps> = ({
   // Delete modal confirmation state
   const [deleteTarget, setDeleteTarget] = useState<Produk | null>(null);
 
-  // Template Group Active Tab
-  const [presetCategory, setPresetCategory] = useState<'Kopi' | 'Minuman' | 'Makanan' | 'Snack'>('Kopi');
-
   const categoryPresets = [
     'Makanan',
     'Minuman',
@@ -101,34 +88,6 @@ export const ProdukView: React.FC<ProdukViewProps> = ({
     'Dessert',
     'Paket Promo',
   ];
-
-  // Quick menu templates organized by category for rich choices
-  const categorizedTemplates: Record<'Kopi' | 'Minuman' | 'Makanan' | 'Snack', MenuPreset[]> = {
-    Kopi: [
-      { nama: 'Kopi Susu Gula Aren', harga: 18000, kategori: 'Minuman Kopi', adaPilihanSuhu: true, deskripsi: 'Espresso + susu segar + aren organik', favorit: true },
-      { nama: 'Americano Klasik', harga: 15000, kategori: 'Minuman Kopi', adaPilihanSuhu: true, deskripsi: 'Double shot espresso w/ hot or iced water' },
-      { nama: 'Caramel Macchiato', harga: 26000, kategori: 'Minuman Kopi', adaPilihanSuhu: true, deskripsi: 'Espresso dengan sirup karamel lembut' },
-      { nama: 'Kopi Tubruk Robusta', harga: 12000, kategori: 'Minuman Kopi', adaPilihanSuhu: false, deskripsi: 'Seduhan tradisional robusta nusantara' },
-    ],
-    Minuman: [
-      { nama: 'Matcha Latte Creamy', harga: 24000, kategori: 'Teh & Non-Kopi', adaPilihanSuhu: true, deskripsi: 'Pure uji matcha + fresh steamed milk', favorit: true },
-      { nama: 'Fresh Lemon Tea Honey', harga: 14000, kategori: 'Teh & Non-Kopi', adaPilihanSuhu: true, deskripsi: 'Teh melati peras lemon segar & madu murni' },
-      { nama: 'Es Teh Manis Melati', harga: 8000, kategori: 'Minuman', adaPilihanSuhu: true, deskripsi: 'Teh melati wangi dingin menyegarkan' },
-      { nama: 'Cokelat Belgia Hangat / Dingin', harga: 22000, kategori: 'Minuman', adaPilihanSuhu: true, deskripsi: 'Dark cocoa Belgia kental & kaya rasa' },
-    ],
-    Makanan: [
-      { nama: 'Nasi Goreng Spesial', harga: 28000, kategori: 'Makanan', adaPilihanSuhu: false, deskripsi: 'Nasi goreng bumbu rempah + telur + sate', favorit: true },
-      { nama: 'Ayam Geprek Sambal Korek', harga: 25000, kategori: 'Makanan', adaPilihanSuhu: false, deskripsi: 'Ayam krispi gurih dengan sambal bawang pedas' },
-      { nama: 'Mie Goreng Jawa Klasik', harga: 24000, kategori: 'Makanan', adaPilihanSuhu: false, deskripsi: 'Mie kuning kenyal dengan bumbu manis gurih' },
-      { nama: 'Soto Ayam Lamongan', harga: 26000, kategori: 'Makanan', adaPilihanSuhu: false, deskripsi: 'Kuah kuning harum koya udang renyah' },
-    ],
-    Snack: [
-      { nama: 'Kentang Goreng Truffle', harga: 20000, kategori: 'Snack', adaPilihanSuhu: false, deskripsi: 'Shoestring crispy dengan minyak aroma truffle' },
-      { nama: 'Croissant Almond Butter', harga: 22000, kategori: 'Snack', adaPilihanSuhu: false, deskripsi: 'Flaky pastry Prancis panggang almond renyah' },
-      { nama: 'Pisang Goreng Keju Aren', harga: 16000, kategori: 'Snack', adaPilihanSuhu: false, deskripsi: 'Pisang tanduk manis tabur keju & aren' },
-      { nama: 'Basque Burnt Cheesecake', harga: 28000, kategori: 'Dessert', adaPilihanSuhu: false, deskripsi: 'Cheesecake lembut karamel panggang' },
-    ],
-  };
 
   // Common quick price shortcuts
   const priceShortcuts = [12000, 15000, 18000, 20000, 25000, 28000, 35000];
@@ -154,26 +113,6 @@ export const ProdukView: React.FC<ProdukViewProps> = ({
 
   const setExactPrice = (val: number) => {
     setHargaRaw(val.toLocaleString('id-ID'));
-  };
-
-  // Apply template preset
-  const applyPreset = (preset: MenuPreset) => {
-    setNama(preset.nama);
-    setHargaRaw(preset.harga.toLocaleString('id-ID'));
-    setKategori(preset.kategori);
-    setAdaPilihanSuhu(preset.adaPilihanSuhu);
-    setDeskripsi(preset.deskripsi || '');
-    setFavorit(Boolean(preset.favorit));
-
-    // Scroll to form smoothly
-    setTimeout(() => {
-      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      const mainEl = document.querySelector('main');
-      if (mainEl && formRef.current) {
-        mainEl.scrollTo({ top: formRef.current.offsetTop - 20, behavior: 'smooth' });
-      }
-      nameInputRef.current?.focus();
-    }, 50);
   };
 
   // Start editing existing product:
@@ -299,7 +238,7 @@ export const ProdukView: React.FC<ProdukViewProps> = ({
             Katalog &amp; Manajemen Menu
           </h1>
           <p className="text-xs sm:text-sm text-[#56635B] mt-1 font-sans">
-            Input menu dengan format Rupiah otomatis langsung tertera, pilihan template instan, dan opsi Panas / Dingin.
+            Input menu dengan format Rupiah otomatis langsung tertera dan opsi Panas / Dingin.
           </p>
         </div>
         {editingId && (
@@ -312,73 +251,6 @@ export const ProdukView: React.FC<ProdukViewProps> = ({
             Batal Mode Edit
           </button>
         )}
-      </div>
-
-      {/* Pilihan Input Menu Cepat (Quick Template Picker by Category) */}
-      <div className="bg-[#FCFBF7] rounded-3xl p-5 sm:p-6 border border-[#D8DED6] shadow-2xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-xs font-semibold text-[#1F4034] uppercase tracking-wider">
-            <Sparkles className="w-4 h-4 text-[#C2A06A]" />
-            <span>Pilihan Template Menu Instan (Klik untuk Isi Otomatis)</span>
-          </div>
-
-          {/* Group Filter Tabs */}
-          <div className="flex gap-1.5 bg-[#F1F3EF] p-1 rounded-xl text-xs font-medium self-start sm:self-auto">
-            {(['Kopi', 'Minuman', 'Makanan', 'Snack'] as const).map(tab => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setPresetCategory(tab)}
-                className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                  presetCategory === tab
-                    ? 'bg-white text-[#1F4034] font-semibold shadow-2xs'
-                    : 'text-[#56635B] hover:text-[#1B2521]'
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Template Buttons */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-          {categorizedTemplates[presetCategory].map(item => (
-            <button
-              key={item.nama}
-              type="button"
-              onClick={() => applyPreset(item)}
-              className="text-left p-3 rounded-2xl border border-[#D8DED6] hover:border-[#1F4034] bg-white hover:bg-[#1F4034]/5 text-[#1B2521] transition-all cursor-pointer flex flex-col justify-between gap-2 shadow-2xs hover:shadow-xs active:scale-98 group"
-            >
-              <div>
-                <div className="flex items-start justify-between gap-1">
-                  <span className="font-semibold text-xs text-[#1B2521] group-hover:text-[#1F4034] transition-colors leading-tight">
-                    {item.nama}
-                  </span>
-                  {item.favorit && (
-                    <Star className="w-3 h-3 text-amber-500 fill-amber-500 shrink-0 mt-0.5" />
-                  )}
-                </div>
-                {item.deskripsi && (
-                  <p className="text-[10px] text-[#56635B] mt-0.5 line-clamp-1">
-                    {item.deskripsi}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex items-center justify-between text-[11px] pt-1 border-t border-dashed border-[#D8DED6]/60">
-                <span className="text-[#7C5E2E] font-serif font-bold font-mono">
-                  {formatRupiah(item.harga)}
-                </span>
-                {item.adaPilihanSuhu && (
-                  <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-sky-50 text-sky-800 font-semibold border border-sky-200">
-                    Dingin / Panas
-                  </span>
-                )}
-              </div>
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Form Input Menu Baru / Edit Menu */}

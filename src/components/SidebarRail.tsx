@@ -21,7 +21,7 @@ export const SidebarRail: React.FC<SidebarRailProps> = ({
   namaToko,
   pendingAccCount = 0,
 }) => {
-  const isOwner = user.peran === 'Owner';
+  const isOwner = user.peran === 'Owner' || user.peran === 'Admin';
   const initial = user.nama.slice(0, 2).toUpperCase();
 
   const navItems: { id: ActiveView; label: string; icon: React.ReactNode; ownerOnly?: boolean; badge?: number }[] = [
@@ -31,6 +31,7 @@ export const SidebarRail: React.FC<SidebarRailProps> = ({
       label: 'Laporan',
       icon: <BarChart3 className="w-5 h-5" />,
       badge: isOwner && pendingAccCount > 0 ? pendingAccCount : undefined,
+      ownerOnly: true,
     },
     { id: 'produk', label: 'Produk', icon: <UtensilsCrossed className="w-5 h-5" />, ownerOnly: true },
     { id: 'akun', label: 'Akun', icon: <Users className="w-5 h-5" />, ownerOnly: true },

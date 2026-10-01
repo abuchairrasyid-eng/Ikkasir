@@ -6,9 +6,11 @@ const K = {
   TX: 'kasir_transaksi_db',
   USERS: 'kasir_users_db',
   Q: 'kasir_sync_queue',
+  FAILED: 'kasir_sync_failed',
 };
 
-type Job = { action: string; payload: Record<string, unknown> };
+type Job = { action: string; payload: Record<string, unknown>; tries?: number; error?: string };
+const MAX_TRIES = 6; // setelah 6 kali gagal, dipindah ke daftar 'gagal' (tetap disimpan, tidak dibuang)
 interface Cfg { apiUrl: string; apiToken: string }
 type Row = Record<string, unknown>;
 
@@ -39,6 +41,8 @@ async function call(c: Cfg, action: string, payload?: Record<string, unknown>): 
 
 const loadQ = (): Job[] => { try { return JSON.parse(localStorage.getItem(K.Q) || '[]'); } catch { return []; } };
 const saveQ = (q: Job[]) => localStorage.setItem(K.Q, JSON.stringify(q));
+const loadFailed = (): Job[] => { try { return JSON.parse(localStorage.getItem(K.FAILED) || '[]'); } catch { return []; } };
+const saveFailed = (q: Job[]) => localStorage.setItem(K.FAILED, JSON.stringify(q));
 const emit = (name: string, detail?: unknown) => window.dispatchEvent(new CustomEvent(name, { detail }));
 const bool = (v: unknown) => v === true || v === 'TRUE' || v === 'true';
 
@@ -78,7 +82,7 @@ function mapUser(r: Row): User {
     id: String(r.ID),
     nama: String(r.Nama || ''),
     username: String(r.Username || ''),
-    peran: r.Peran === 'Owner' ? 'Owner' : 'Kasir',
+    peran: r.Peran === 'Owner' || r.Peran === 'Admin' ? (r.Peran as 'Owner' | 'Admin') : 'Kasir',
   };
 }
 
@@ -87,6 +91,14 @@ let flushing = false;
 export const CloudSync = {
   enabled(): boolean { return cfg() !== null; },
   pending(): number { return loadQ().length; },
+  failedCount(): number { return loadFailed().length; },
+  // Kembalikan data yang gagal permanen ke antrean untuk dicoba lagi
+  retryFailed() {
+    const f = loadFailed();
+    if (!f.length) return;
+    saveQ([...loadQ(), ...f.map(j => ({ action: j.action, payload: j.payload }))]);
+    saveFailed([]);
+  },
 
   queue(action: string, payload: Record<string, unknown>) {
     const q = loadQ();
@@ -112,7 +124,22 @@ export const CloudSync = {
           emit('cloud-status', { pending: q.length, offline: true });
           return; // offline: coba lagi nanti
         }
-        if (!r.ok) emit('cloud-status', { pending: q.length - 1, error: String(r.error || 'Server menolak data') });
+        if (!r.ok) {
+          // JANGAN dibuang: simpan tetap di antrean dan coba lagi di siklus berikutnya
+          const tries = (job.tries || 0) + 1;
+          const msg = String(r.error || 'Server menolak data');
+          if (tries >= MAX_TRIES) {
+            saveFailed([...loadFailed(), { ...job, tries, error: msg }]);
+            saveQ(loadQ().slice(1));
+            emit('cloud-status', { pending: loadQ().length, failed: loadFailed().length, error: msg });
+            continue;
+          }
+          const cur = loadQ();
+          cur[0] = { ...cur[0], tries, error: msg };
+          saveQ(cur);
+          emit('cloud-status', { pending: cur.length, error: msg });
+          return;
+        }
         done.add(job.action);
         saveQ(loadQ().slice(1));
       }

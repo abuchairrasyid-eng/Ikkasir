@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User, AppConfig } from '../types';
-import { ApiClient, APPS_SCRIPT_TEMPLATE } from '../services/api';
-import { X, Copy, Check, Database, Volume2, Printer, Store, RefreshCw, LogOut, QrCode, Percent } from 'lucide-react';
+import { X, Volume2, Printer, Store, RefreshCw, LogOut, QrCode, Percent, Bluetooth, CheckCircle2, AlertCircle } from 'lucide-react';
+import { BluetoothPrinter } from '../services/bluetoothPrinter';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -25,45 +25,66 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [namaToko, setNamaToko] = useState(config.namaToko);
   const [autoPrint, setAutoPrint] = useState(config.autoPrint);
   const [soundEnabled, setSoundEnabled] = useState(config.soundEnabled);
-  const [qrisEnabled, setQrisEnabled] = useState(config.qrisEnabled !== false);
+  const [qrisBarcodeEnabled, setQrisBarcodeEnabled] = useState(
+    config.qrisBarcodeEnabled !== undefined 
+      ? config.qrisBarcodeEnabled 
+      : (config.qrisPopupEnabled !== undefined ? config.qrisPopupEnabled : false)
+  );
   const [diskonEnabled, setDiskonEnabled] = useState(config.diskonEnabled !== false);
-  const [mode, setMode] = useState<'local' | 'cloud'>(config.mode);
-  const [apiUrl, setApiUrl] = useState(config.apiUrl);
-  const [apiToken, setApiToken] = useState(config.apiToken);
-
-  const [testResult, setTestResult] = useState<{ success?: boolean; message?: string } | null>(null);
-  const [isTesting, setIsTesting] = useState(false);
-  const [showCode, setShowCode] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [bluetoothPrinterEnabled, setBluetoothPrinterEnabled] = useState(config.bluetoothPrinterEnabled || false);
+  const [btConnected, setBtConnected] = useState(BluetoothPrinter.isConnected());
+  const [btDeviceName, setBtDeviceName] = useState(BluetoothPrinter.getDeviceName());
+  const [btStatusMsg, setBtStatusMsg] = useState('');
+  const [btLoading, setBtLoading] = useState(false);
 
   if (!isOpen) return null;
 
+  const handleConnectBt = async () => {
+    setBtLoading(true);
+    setBtStatusMsg('Mencari printer bluetooth...');
+    const res = await BluetoothPrinter.connect();
+    setBtLoading(false);
+    if (res.success) {
+      setBtConnected(true);
+      setBtDeviceName(res.deviceName || 'Printer Bluetooth');
+      setBtStatusMsg(`Terhubung dengan ${res.deviceName || 'Printer'}`);
+    } else {
+      setBtStatusMsg(res.error || 'Gagal terhubung.');
+    }
+  };
+
+  const handleDisconnectBt = () => {
+    BluetoothPrinter.disconnect();
+    setBtConnected(false);
+    setBtStatusMsg('Koneksi printer diputuskan.');
+  };
+
+  const handleTestPrintBt = async () => {
+    setBtLoading(true);
+    setBtStatusMsg('Mengirim data uji cetak...');
+    const ok = await BluetoothPrinter.testPrint(namaToko.trim() || 'Kasir');
+    setBtLoading(false);
+    if (ok) {
+      setBtStatusMsg('Uji cetak berhasil dikirim ke printer!');
+    } else {
+      setBtStatusMsg('Gagal mencetak. Pastikan printer terhubung.');
+    }
+  };
+
   const handleSave = () => {
     onSaveConfig({
+      ...config,
       namaToko: namaToko.trim() || 'Kasir',
       autoPrint,
       soundEnabled,
-      qrisEnabled,
+      qrisEnabled: true, // QRIS payment is always available
+      qrisBarcodeEnabled,
+      qrisPopupEnabled: qrisBarcodeEnabled,
       diskonEnabled,
-      mode,
-      apiUrl: apiUrl.trim(),
-      apiToken: apiToken.trim(),
+      bluetoothPrinterEnabled,
+      bluetoothDeviceName: btConnected ? btDeviceName : config.bluetoothDeviceName,
     });
     onClose();
-  };
-
-  const handleTestConnection = async () => {
-    setIsTesting(true);
-    setTestResult(null);
-    const res = await ApiClient.testCloudConnection(apiUrl.trim(), apiToken.trim());
-    setTestResult(res);
-    setIsTesting(false);
-  };
-
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(APPS_SCRIPT_TEMPLATE);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -141,6 +162,78 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </label>
             </div>
 
+            {/* Toggle Printer Thermal Bluetooth */}
+            <div className="pt-3 border-t border-[#D8DED6]/70 space-y-3">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="text-sm font-medium text-[#1B2521] flex items-center gap-1.5">
+                    <Bluetooth className="w-4 h-4 text-blue-600" />
+                    Printer Thermal Bluetooth (ESC/POS)
+                  </div>
+                  <p className="text-xs text-[#56635B]">
+                    Aktifkan opsi cetak langsung ke printer mini/kasir 58mm atau 80mm via Bluetooth tanpa dialog browser.
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={bluetoothPrinterEnabled}
+                    onChange={e => setBluetoothPrinterEnabled(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#1F4034]"></div>
+                </label>
+              </div>
+
+              {/* Sub-panel when Bluetooth Printer is enabled */}
+              {bluetoothPrinterEnabled && (
+                <div className="p-3.5 bg-white rounded-2xl border border-[#D8DED6] space-y-2.5 animate-fade-in">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-[#56635B] flex items-center gap-1.5">
+                      <span className={`w-2 h-2 rounded-full ${btConnected ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'}`} />
+                      {btConnected ? `Terhubung: ${btDeviceName}` : 'Belum Terhubung ke Printer'}
+                    </span>
+                    {btConnected && (
+                      <button
+                        type="button"
+                        onClick={handleDisconnectBt}
+                        className="text-[11px] text-red-600 hover:underline cursor-pointer"
+                      >
+                        Putuskan
+                      </button>
+                    )}
+                  </div>
+
+                  {btStatusMsg && (
+                    <div className="text-[11px] text-[#1F4034] bg-[#F1F3EF] px-2.5 py-1 rounded-lg">
+                      {btStatusMsg}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleConnectBt}
+                      disabled={btLoading}
+                      className="px-3 py-1.5 rounded-xl bg-[#12241E] hover:bg-[#1F4034] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95"
+                    >
+                      <Bluetooth className="w-3.5 h-3.5 text-[#C2A06A]" />
+                      <span>{btConnected ? 'Ganti Printer' : 'Hubungkan Bluetooth'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleTestPrintBt}
+                      disabled={btLoading}
+                      className="px-3 py-1.5 rounded-xl border border-[#D8DED6] hover:bg-gray-100 text-gray-700 text-xs font-medium cursor-pointer disabled:opacity-50 active:scale-95"
+                    >
+                      Uji Cetak
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center justify-between gap-4">
               <div>
                 <div className="text-sm font-medium text-[#1B2521] flex items-center gap-1.5">
@@ -162,22 +255,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </label>
             </div>
 
-            {/* Toggle QRIS Payment Option */}
+            {/* Toggle Barcode QRIS di Layar */}
             <div className="flex items-center justify-between gap-4 pt-3 border-t border-[#D8DED6]/70">
               <div>
                 <div className="text-sm font-medium text-[#1B2521] flex items-center gap-1.5">
                   <QrCode className="w-4 h-4 text-[#1F4034]" />
-                  Metode Bayar QRIS
+                  Tampilkan Barcode QRIS di Layar
                 </div>
                 <p className="text-xs text-[#56635B]">
-                  Aktifkan atau sembunyikan opsi pembayaran QRIS di kasir.
+                  Jika dinonaktifkan, metode pembayaran QRIS tetap ada dan bisa dipilih di kasir, tetapi barcode QR tidak muncul di layar (transaksi QRIS langsung selesai sukses).
                 </p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={qrisEnabled}
-                  onChange={e => setQrisEnabled(e.target.checked)}
+                  checked={qrisBarcodeEnabled}
+                  onChange={e => setQrisBarcodeEnabled(e.target.checked)}
                   className="sr-only peer"
                 />
                 <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#1F4034]"></div>
@@ -207,124 +300,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
-          {/* Google Sheets / Apps Script Integration */}
-          <div className="p-4 rounded-2xl bg-[#F1F3EF] border border-[#D8DED6] space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Database className="w-4 h-4 text-[#1F4034]" />
-                <span className="font-semibold text-xs text-[#1B2521] uppercase tracking-wider">
-                  Koneksi Google Sheets (Apps Script)
-                </span>
-              </div>
-              <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-emerald-100 text-emerald-800">
-                {mode === 'cloud' && apiUrl ? 'Mode Cloud' : 'Mode Offline Lokal'}
-              </span>
-            </div>
-
-            <p className="text-xs text-[#56635B] leading-relaxed">
-              Secara bawaan kasir menyimpan data offline di peramban. Jika Anda ingin menghubungkan Google Sheets sebagai database sentral kasir:
-            </p>
-
-            <div className="space-y-2 pt-1">
-              <div>
-                <label className="block text-[11px] font-medium text-[#56635B]">
-                  URL Web App Google Apps Script (/exec)
-                </label>
-                <input
-                  type="url"
-                  value={apiUrl}
-                  onChange={e => {
-                    setApiUrl(e.target.value);
-                    if (e.target.value) setMode('cloud');
-                  }}
-                  placeholder="https://script.google.com/macros/s/.../exec"
-                  className="w-full bg-white border border-[#D8DED6] rounded-xl px-3 py-1.5 text-xs text-[#1B2521] focus:outline-none focus:border-[#1F4034]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-medium text-[#56635B]">
-                  Token Rahasia (Samakan dengan di Code.gs)
-                </label>
-                <input
-                  type="text"
-                  value={apiToken}
-                  onChange={e => setApiToken(e.target.value)}
-                  placeholder="kode_rahasia_anda"
-                  className="w-full bg-white border border-[#D8DED6] rounded-xl px-3 py-1.5 text-xs text-[#1B2521] focus:outline-none focus:border-[#1F4034]"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={handleTestConnection}
-                  disabled={isTesting || !apiUrl}
-                  className="px-3 py-1.5 rounded-lg border border-[#D8DED6] bg-white hover:bg-gray-50 text-xs font-medium text-[#1B2521] disabled:opacity-40 cursor-pointer"
-                >
-                  {isTesting ? 'Menguji...' : 'Uji Koneksi'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowCode(!showCode)}
-                  className="text-xs text-[#1F4034] hover:underline underline-offset-4 font-medium"
-                >
-                  {showCode ? 'Sembunyikan Kode Apps Script' : 'Lihat Kode Code.gs'}
-                </button>
-              </div>
-
-              {testResult && (
-                <div
-                  className={`text-xs p-2.5 rounded-lg ${
-                    testResult.success
-                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                      : 'bg-red-50 text-red-800 border border-red-200'
-                  }`}
-                >
-                  {testResult.message}
-                </div>
-              )}
-
-              {showCode && (
-                <div className="mt-2 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-[#1B2521]">
-                      Script Google Apps Script (Code.gs):
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleCopyCode}
-                      className="inline-flex items-center gap-1 text-[11px] text-[#1F4034] font-semibold hover:underline"
-                    >
-                      {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                      {copied ? 'Tersalin!' : 'Salin Kode'}
-                    </button>
-                  </div>
-                  <pre className="p-3 bg-[#1B2521] text-[#F3EBDD] rounded-xl text-[10px] overflow-x-auto max-h-36 font-mono">
-                    {APPS_SCRIPT_TEMPLATE}
-                  </pre>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Reset Demo Data */}
-          <div className="pt-2">
-            <button
-              type="button"
-              onClick={() => {
-                if (confirm('Kembalikan semua menu, stok, dan contoh riwayat transaksi ke data bawaan demo?')) {
-                  onResetData();
-                  onClose();
-                }
-              }}
-              className="text-xs text-[#56635B] hover:text-[#1B2521] hover:underline flex items-center gap-1.5 cursor-pointer"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Reset Data Contoh (Pulihkan Menu &amp; Stok Demo)
-            </button>
-          </div>
         </div>
 
         {/* Footer */}

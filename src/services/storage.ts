@@ -1,10 +1,12 @@
-import { User, Produk, Transaksi, AppConfig, CartItem } from '../types';
+import { User, Produk, Transaksi, AppConfig, CartItem, PaymentMethod } from '../types';
 import { CloudSync } from './cloud';
 import { CLOUD_URL, CLOUD_TOKEN } from '../config';
 
 function readList<T>(key: string): T[] {
   try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; }
 }
+
+const CLOUD_ON = CLOUD_URL.startsWith('http');
 
 const STORAGE_KEYS = {
   USER: 'kasir_user',
@@ -17,12 +19,16 @@ const STORAGE_KEYS = {
 export const DEFAULT_CONFIG: AppConfig = {
   namaToko: 'Kasir',
   autoPrint: true,
-  apiUrl: CLOUD_URL.startsWith('http') ? CLOUD_URL : '',
-  apiToken: CLOUD_URL.startsWith('http') ? CLOUD_TOKEN : '',
-  mode: CLOUD_URL.startsWith('http') ? 'cloud' : 'local',
+  apiUrl: CLOUD_ON ? CLOUD_URL : '',
+  apiToken: CLOUD_ON ? CLOUD_TOKEN : '',
+  mode: CLOUD_ON ? 'cloud' : 'local',
   soundEnabled: true,
   qrisEnabled: true,
+  qrisBarcodeEnabled: false, // Default false: barcode tidak muncul jika kasir memakai EDC/ADC fisik, metode tetap aktif
+  qrisPopupEnabled: false,
   diskonEnabled: true,
+  bluetoothPrinterEnabled: false,
+  bluetoothDeviceName: '',
 };
 
 export const INITIAL_USERS: User[] = [
@@ -210,7 +216,7 @@ function generateSeedTransactions(): Transaksi[] {
       { cartItemId: 'p-12', id: 'p-12', nama: 'Basque Burnt Cheesecake', harga: 28000, qty: 1, kategori: 'Dessert' },
     ],
     diskon: 0,
-    metodeBayar: 'Transfer',
+    metodeBayar: 'Kartu',
     total: 52000,
     bayar: 52000,
     kembalian: 0,
@@ -256,7 +262,7 @@ function generateSeedTransactions(): Transaksi[] {
     { day: 1, kasir: 'Siti Rahma', total: 174000, method: 'QRIS' as const },
     { day: 1, kasir: 'Budi Santoso', total: 240000, method: 'Tunai' as const },
     { day: 2, kasir: 'Siti Rahma', total: 320000, method: 'Kartu' as const },
-    { day: 2, kasir: 'Budi Santoso', total: 185000, method: 'Transfer' as const },
+    { day: 2, kasir: 'Budi Santoso', total: 185000, method: 'Kartu' as const },
     { day: 3, kasir: 'Siti Rahma', total: 410000, method: 'Tunai' as const },
     { day: 3, kasir: 'Budi Santoso', total: 295000, method: 'QRIS' as const },
     { day: 4, kasir: 'Siti Rahma', total: 220000, method: 'QRIS' as const },
@@ -296,7 +302,9 @@ export const StorageService = {
       return DEFAULT_CONFIG;
     }
     try {
-      return { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+      const saved = { ...DEFAULT_CONFIG, ...JSON.parse(raw) };
+      // URL di src/config.ts selalu menang, supaya semua perangkat memakai server yang sama
+      return CLOUD_ON ? { ...saved, apiUrl: CLOUD_URL, apiToken: CLOUD_TOKEN, mode: 'cloud' } : saved;
     } catch {
       return DEFAULT_CONFIG;
     }
@@ -434,7 +442,7 @@ export const StorageService = {
     const list = this.getTransaksi();
     const newTx: Transaksi = {
       ...tx,
-      id: 'TRX-' + (1000 + list.length + 1),
+      id: 'TRX-' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-' + Math.random().toString(36).slice(2, 6).toUpperCase(),
       tanggal: new Date().toISOString(),
     };
 
@@ -496,8 +504,7 @@ export const StorageService = {
     const list = this.getTransaksi();
     const target = list.find(t => t.id === id);
     if (!target || (target.status !== 'OpenBill' && target.status !== 'Ditahan')) return null;
-    target.status = 'Dilanjutkan';
-    this.saveTransaksi(list);
+    // Status TIDAK diubah: Open Bill tetap terlihat di daftar sampai benar-benar dibayar atau dibatalkan.
     return {
       items: target.items,
       nomorMeja: target.nomorMeja,
@@ -511,6 +518,19 @@ export const StorageService = {
     const target = list.find(t => t.id === id);
     if (!target) return false;
     target.status = 'Dikoreksi';
+    this.saveTransaksi(list);
+    return true;
+  },
+
+  selesaikanTahan(id: string, metodeBayar: PaymentMethod = 'Tunai', bayar?: number): boolean {
+    const list = this.getTransaksi();
+    const target = list.find(t => t.id === id);
+    if (!target || (target.status !== 'Ditahan' && target.status !== 'OpenBill')) return false;
+    target.status = 'Selesai';
+    target.metodeBayar = metodeBayar;
+    target.bayar = bayar !== undefined ? bayar : target.total;
+    target.kembalian = Math.max(0, target.bayar - target.total);
+    target.tanggal = new Date().toISOString();
     this.saveTransaksi(list);
     return true;
   },

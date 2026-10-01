@@ -19,6 +19,7 @@ export const SplitBillModal: React.FC<SplitBillModalProps> = ({
   onClose,
 }) => {
   const [splitCount, setSplitCount] = useState<number>(2);
+  const [inputCountRaw, setInputCountRaw] = useState<string>('2');
 
   // Per-person amount
   const perPersonAmount = Math.ceil(total / Math.max(1, splitCount));
@@ -31,9 +32,7 @@ export const SplitBillModal: React.FC<SplitBillModalProps> = ({
     { personIndex: 2, metode: 'QRIS', paid: false },
   ]);
 
-  const handleSetSplitCount = (count: number) => {
-    const validCount = Math.max(2, Math.min(50, count));
-    setSplitCount(validCount);
+  const updatePaymentsForCount = (validCount: number) => {
     setPersonPayments(prev => {
       const next = [];
       for (let i = 1; i <= validCount; i++) {
@@ -42,6 +41,39 @@ export const SplitBillModal: React.FC<SplitBillModalProps> = ({
       }
       return next;
     });
+  };
+
+  const handleSetSplitCount = (count: number) => {
+    const validCount = Math.max(2, Math.min(50, count));
+    setSplitCount(validCount);
+    setInputCountRaw(String(validCount));
+    updatePaymentsForCount(validCount);
+  };
+
+  const handleCustomInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value.replace(/\D/g, '');
+    setInputCountRaw(rawVal);
+
+    if (rawVal === '') {
+      // Allow user to empty the input completely without forcing the initial digit
+      return;
+    }
+
+    const num = parseInt(rawVal, 10);
+    if (!isNaN(num) && num >= 2 && num <= 50) {
+      setSplitCount(num);
+      updatePaymentsForCount(num);
+    }
+  };
+
+  const handleCustomInputBlur = () => {
+    if (!inputCountRaw || parseInt(inputCountRaw, 10) < 2) {
+      handleSetSplitCount(2);
+    } else if (parseInt(inputCountRaw, 10) > 50) {
+      handleSetSplitCount(50);
+    } else {
+      handleSetSplitCount(parseInt(inputCountRaw, 10));
+    }
   };
 
   const togglePersonPaid = (index: number) => {
@@ -124,22 +156,43 @@ export const SplitBillModal: React.FC<SplitBillModalProps> = ({
               ))}
 
               {/* Input Ketik Sendiri (Bisa Lebih dari 6 Orang) */}
-              <div className="flex items-center gap-1.5 ml-auto bg-white border border-[#D8DED6] rounded-xl px-2.5 py-1 shadow-2xs focus-within:border-[#1F4034] focus-within:ring-2 focus-within:ring-[#1F4034]/20">
+              <div className="flex items-center gap-1.5 ml-auto bg-white border border-[#D8DED6] rounded-xl px-2 py-1 shadow-2xs focus-within:border-[#1F4034] focus-within:ring-2 focus-within:ring-[#1F4034]/20">
                 <Users className="w-3.5 h-3.5 text-[#56635B]" />
                 <span className="text-xs text-[#56635B] font-medium hidden sm:inline">Ketik:</span>
+                <button
+                  type="button"
+                  onClick={() => handleSetSplitCount(splitCount - 1)}
+                  disabled={splitCount <= 2}
+                  className="w-5 h-5 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-bold text-gray-700 flex items-center justify-center cursor-pointer active:scale-95"
+                  title="Kurangi 1 orang"
+                >
+                  -
+                </button>
                 <input
-                  type="number"
+                  type="text"
                   inputMode="numeric"
-                  min="2"
-                  max="50"
-                  value={splitCount}
-                  onChange={e => {
-                    const val = parseInt(e.target.value, 10);
-                    if (!isNaN(val)) handleSetSplitCount(val);
+                  pattern="[0-9]*"
+                  value={inputCountRaw}
+                  onChange={handleCustomInputChange}
+                  onBlur={handleCustomInputBlur}
+                  onFocus={e => e.target.select()}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.currentTarget.blur();
+                    }
                   }}
-                  className="w-12 text-center font-bold text-xs text-[#1B2521] outline-none"
+                  className="w-8 text-center font-bold text-xs text-[#1B2521] outline-none"
                   placeholder="2-50"
                 />
+                <button
+                  type="button"
+                  onClick={() => handleSetSplitCount(splitCount + 1)}
+                  disabled={splitCount >= 50}
+                  className="w-5 h-5 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed text-xs font-bold text-gray-700 flex items-center justify-center cursor-pointer active:scale-95"
+                  title="Tambah 1 orang"
+                >
+                  +
+                </button>
                 <span className="text-xs font-bold text-[#1B2521]">Orang</span>
               </div>
             </div>
@@ -200,7 +253,6 @@ export const SplitBillModal: React.FC<SplitBillModalProps> = ({
                     >
                       <option value="Tunai">Tunai</option>
                       <option value="QRIS">QRIS</option>
-                      <option value="Transfer">Transfer</option>
                       <option value="Kartu">Kartu</option>
                     </select>
 

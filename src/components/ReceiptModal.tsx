@@ -1,20 +1,25 @@
 import React, { useState } from 'react';
 import { Transaksi } from '../types';
 import { formatRupiah, formatDateTime } from '../services/storage';
-import { Printer, X, CheckCircle2 } from 'lucide-react';
+import { Printer, X, CheckCircle2, Bluetooth, Loader2 } from 'lucide-react';
+import { BluetoothPrinter } from '../services/bluetoothPrinter';
 
 interface ReceiptModalProps {
   transaksi: Transaksi | null;
   namaToko: string;
+  bluetoothPrinterEnabled?: boolean;
   onClose: () => void;
 }
 
 export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   transaksi,
   namaToko,
+  bluetoothPrinterEnabled = false,
   onClose,
 }) => {
   const [activeSlip, setActiveSlip] = useState<'pelanggan' | 'dapur' | 'bar'>('pelanggan');
+  const [btPrinting, setBtPrinting] = useState(false);
+  const [printFeedback, setPrintFeedback] = useState<string>('');
 
   if (!transaksi) return null;
 
@@ -27,6 +32,31 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
 
   const handlePrintAllSlips = () => {
     window.print();
+  };
+
+  const handlePrintBluetooth = async () => {
+    setBtPrinting(true);
+    setPrintFeedback('Mempersiapkan printer Bluetooth...');
+
+    // If not connected yet, try connecting first
+    if (!BluetoothPrinter.isConnected()) {
+      const conn = await BluetoothPrinter.connect();
+      if (!conn.success) {
+        setBtPrinting(false);
+        setPrintFeedback(conn.error || 'Gagal terhubung ke printer Bluetooth.');
+        return;
+      }
+    }
+
+    setPrintFeedback(`Mencetak ${activeSlip === 'pelanggan' ? 'struk pembayaran' : `bon ${activeSlip}`}...`);
+    const ok = await BluetoothPrinter.printSlip(transaksi, activeSlip, namaToko);
+    setBtPrinting(false);
+    if (ok) {
+      setPrintFeedback('Struk berhasil dicetak via Bluetooth!');
+      setTimeout(() => setPrintFeedback(''), 4000);
+    } else {
+      setPrintFeedback('Gagal mengirim ke printer. Periksa koneksi Bluetooth.');
+    }
   };
 
   return (
@@ -254,22 +284,49 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
         </div>
 
         {/* Footer actions */}
-        <div className="p-4 border-t border-[#D8DED6] bg-[#F1F3EF] flex gap-2 justify-end">
-          <button
-            type="button"
-            onClick={handlePrintAllSlips}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#1F4034] hover:bg-[#2B5646] text-[#F3EBDD] font-medium text-xs shadow-sm cursor-pointer"
-          >
-            <Printer className="w-4 h-4" />
-            Cetak Struk
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl border border-[#D8DED6] hover:bg-white text-[#1B2521] font-medium text-xs cursor-pointer"
-          >
-            Selesai
-          </button>
+        <div className="p-4 border-t border-[#D8DED6] bg-[#F1F3EF] flex flex-col sm:flex-row items-center justify-between gap-2.5">
+          {printFeedback ? (
+            <div className="text-[11px] font-semibold text-[#1F4034] bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
+              {printFeedback}
+            </div>
+          ) : (
+            <div className="text-[11px] text-gray-500 hidden sm:block">
+              {bluetoothPrinterEnabled ? 'Printer Bluetooth Aktif' : 'Printer Browser / USB'}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            {bluetoothPrinterEnabled && (
+              <button
+                type="button"
+                onClick={handlePrintBluetooth}
+                disabled={btPrinting}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-medium text-xs shadow-sm cursor-pointer disabled:opacity-50 active:scale-95"
+                title="Cetak langsung ke printer thermal 58/80mm via Bluetooth"
+              >
+                {btPrinting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bluetooth className="w-3.5 h-3.5" />}
+                <span>Cetak Bluetooth</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handlePrintAllSlips}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#1F4034] hover:bg-[#2B5646] text-[#F3EBDD] font-medium text-xs shadow-sm cursor-pointer active:scale-95"
+              title="Cetak lewat dialog browser / USB"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>{bluetoothPrinterEnabled ? 'Cetak Browser' : 'Cetak Struk'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3.5 py-2 rounded-xl border border-[#D8DED6] hover:bg-white text-[#1B2521] font-medium text-xs cursor-pointer"
+            >
+              Selesai
+            </button>
+          </div>
         </div>
       </div>
 

@@ -112,8 +112,9 @@ export const AkunView: React.FC<AkunViewProps> = ({
                 onChange={e => setPeran(e.target.value as Role)}
                 className="w-full bg-transparent border-0 border-b border-[#D8DED6] py-1.5 text-sm text-[#1B2521] focus:outline-none focus:border-b-[#1F4034]"
               >
-                <option value="Kasir">Kasir</option>
-                <option value="Owner">Owner (Pemilik)</option>
+                <option value="Kasir">Kasir (Hanya Akses Transaksi Kasir)</option>
+                <option value="Admin">Admin (Akses Laporan &amp; Kelola Toko)</option>
+                <option value="Owner">Owner (Pemilik Toko)</option>
               </select>
             </label>
           </div>
@@ -168,10 +169,12 @@ export const AkunView: React.FC<AkunViewProps> = ({
                         className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium ${
                           u.peran === 'Owner'
                             ? 'bg-[#C2A06A]/15 text-[#7C5E2E]'
+                            : u.peran === 'Admin'
+                            ? 'bg-purple-100 text-purple-800'
                             : 'bg-[#1F4034]/10 text-[#1F4034]'
                         }`}
                       >
-                        {u.peran === 'Owner' ? (
+                        {u.peran === 'Owner' || u.peran === 'Admin' ? (
                           <Shield className="w-3 h-3" />
                         ) : (
                           <UserIcon className="w-3 h-3" />
