@@ -688,8 +688,6 @@ export const KasirView: React.FC<KasirViewProps> = ({
 
         {openBills.length === 0 ? (
           <div className="text-xs text-[#56635B] py-4 italic bg-[#FCFBF7] rounded-2xl px-4 border border-[#D8DED6]/70 flex items-center gap-2">
-            <BookmarkPlus className="w-4 h-4 text-gray-400" />
-            <span>Tidak ada Open Bill yang aktif saat ini. Anda dapat menyimpan pesanan meja dengan tombol <b>&ldquo;Open Bill (Meja)&rdquo;</b> di bon pesanan.</span>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
