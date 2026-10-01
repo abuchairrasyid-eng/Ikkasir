@@ -239,12 +239,7 @@ export const KasirView: React.FC<KasirViewProps> = ({
           </h1>
           <p className="text-xs sm:text-sm text-[#56635B] mt-1 font-sans flex items-center gap-2 flex-wrap">
             <span>{formattedDate}</span>
-            <span>&bull;</span>
-            <span className="text-[#1F4034] font-medium flex items-center gap-1.5 bg-[#EBE3D3]/40 px-2.5 py-0.5 rounded-full text-xs">
-              <Snowflake className="w-3.5 h-3.5 text-sky-600" />
-              <Flame className="w-3.5 h-3.5 text-orange-600" />
-              <span>Pilihan Panas &amp; Dingin &bull; Stepper +/- Langsung</span>
-            </span>
+
           </p>
         </div>
 
