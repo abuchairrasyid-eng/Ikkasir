@@ -77,7 +77,6 @@ export interface AppConfig {
   diskonEnabled?: boolean;
   bluetoothPrinterEnabled?: boolean; // Fitur printer termal bluetooth (bisa diaktifkan/nonaktifkan)
   bluetoothDeviceName?: string;
-  kategoriNonaktif?: string[]; // Kategori menu yang dimatikan (mis. Dessert jika tidak jualan dessert)
 }
 
 export type ActiveView = 'kasir' | 'laporan' | 'produk' | 'akun';

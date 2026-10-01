@@ -637,7 +637,6 @@ export default function App() {
               onUpdateProduk={handleUpdateProduk}
               onDeleteProduk={handleDeleteProduk}
               onToggleAktif={handleToggleProdukAktif}
-              kategoriNonaktif={config.kategoriNonaktif}
             />
           )}
 
