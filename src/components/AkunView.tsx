@@ -48,8 +48,6 @@ export const AkunView: React.FC<AkunViewProps> = ({
           Manajemen Akun &amp; Staf
         </h1>
         <p className="text-xs sm:text-sm text-[#56635B] mt-1 font-sans">
-          Tambahkan staf kasir baru atau atur hak akses peran Owner.
-        </p>
       </div>
 
       {/* Add User Paper Form */}
