@@ -383,7 +383,9 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
           <h1 className="font-serif font-medium text-2xl sm:text-3xl text-[#1B2521] tracking-tight m-0">
             Laporan Penjualan
           </h1>
-
+          <p className="text-xs sm:text-sm text-[#56635B] mt-1 font-sans">
+            {isOwner
+              ? 'Kelola omzet, unduh rekap CSV, dan setujui (ACC) permintaan koreksi salah input kasir.'
               : `Riwayat transaksi kasir untuk ${user.nama}. Anda dapat melaporkan jika ada salah input.`}
           </p>
         </div>
