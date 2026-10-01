@@ -763,9 +763,7 @@ export const KasirView: React.FC<KasirViewProps> = ({
                 Transaksi Baru Selesai &amp; Opsi Salah Input
               </h2>
             </div>
-            <span className="text-xs text-[#56635B]">
-              Kasir dapat mengajukan perbaikan pesanan salah untuk di-ACC Owner
-            </span>
+
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
