@@ -714,7 +714,7 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
                 Grafik Tren Omzet Penjualan
               </h3>
               <p className="text-xs text-[#56635B] mt-0.5">
-                {chartData.isHourly ? 'Pola penjualan per jam (Hari Ini' : 'Grafik omzet harian'}
+                {chartData.isHourly ? 'Hari Ini'}
               </p>
             </div>
             {chartData.maxVal > 0 && (
