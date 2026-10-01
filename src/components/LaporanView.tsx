@@ -598,7 +598,9 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
               <CreditCard className="w-4 h-4 text-[#1F4034]" />
               Laporan Metode Pembayaran
             </h3>
-
+            <p className="text-xs text-[#56635B] mt-0.5">
+              Rincian omzet dan volume transaksi berdasarkan metode pembayaran yang digunakan pelanggan.
+            </p>
           </div>
           <div className="text-xs text-[#56635B] font-mono bg-white px-3 py-1 rounded-xl border border-[#D8DED6] self-start sm:self-auto">
             Total Masuk: <b className="text-[#1F4034]">{formatRupiah(totalPenjualan)}</b>
@@ -714,7 +716,7 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
                 Grafik Tren Omzet Penjualan
               </h3>
               <p className="text-xs text-[#56635B] mt-0.5">
-                {chartData.isHourly ? 'Hari Ini'}
+                {chartData.isHourly ? 'Pola penjualan per jam (Hari Ini)' : 'Grafik omzet harian'}
               </p>
             </div>
             {chartData.maxVal > 0 && (
@@ -821,7 +823,9 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
                 <Flame className="w-4 h-4 text-amber-600" />
                 Pesanan yang Sering Keluar
               </h3>
-
+              <p className="text-xs text-[#56635B] mt-0.5">
+                Peringkat menu paling banyak dipesan pada periode terpilih
+              </p>
             </div>
             <span className="text-[11px] text-[#1F4034] font-medium bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
               {topOrderedItems.items.length} Menu Teratas
