@@ -45,39 +45,37 @@ body {
 /* Animations & feedback - visibly responsive yet clean and minimalist */
 @keyframes pop {
   0% { transform: scale(1); }
-  35% { transform: scale(1.18); }
-  70% { transform: scale(0.95); }
+  50% { transform: scale(1.05); }
   100% { transform: scale(1); }
 }
 
 .animate-pop {
-  animation: pop 0.32s var(--spring) forwards;
+  animation: pop 0.2s var(--ease) forwards;
 }
 
 @keyframes bump {
   0% { transform: scale(1); }
-  40% { transform: scale(1.32); }
-  75% { transform: scale(0.92); }
+  50% { transform: scale(1.02); }
   100% { transform: scale(1); }
 }
 
 .animate-bump {
-  animation: bump 0.32s var(--spring) forwards;
+  animation: bump 0.2s var(--ease) forwards;
 }
 
 @keyframes slideUpFade {
   from {
     opacity: 0;
-    transform: translateY(16px) scale(0.97);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
   }
 }
 
 .animate-spring-up {
-  animation: slideUpFade 0.28s var(--ease) forwards;
+  animation: slideUpFade 0.2s var(--ease) forwards;
 }
 
 @keyframes fadeIn {
@@ -105,9 +103,9 @@ body {
 }
 
 @keyframes flashGlow {
-  0% { box-shadow: 0 0 0 0 rgba(31, 64, 52, 0.45); }
-  50% { box-shadow: 0 0 0 8px rgba(194, 160, 106, 0.35); }
-  100% { box-shadow: 0 0 0 0 rgba(31, 64, 52, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(84, 40, 120, 0.45); }
+  50% { box-shadow: 0 0 0 8px rgba(197, 160, 89, 0.35); }
+  100% { box-shadow: 0 0 0 0 rgba(84, 40, 120, 0); }
 }
 
 .animate-flash-glow {
@@ -136,7 +134,7 @@ body {
 .bon {
   position: relative;
   background: var(--paper);
-  filter: drop-shadow(0 10px 24px rgba(18, 36, 30, 0.08));
+  filter: drop-shadow(0 10px 24px rgba(30, 19, 43, 0.08));
   transition: transform 0.2s var(--ease);
 }
 
@@ -154,12 +152,12 @@ body {
 
 .bon::before {
   top: -7px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='8'%3E%3Cpolygon points='0,8 8,0 16,8' fill='%23FCFBF7'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='8'%3E%3Cpolygon points='0,8 8,0 16,8' fill='%23FCFBFD'/%3E%3C/svg%3E");
 }
 
 .bon::after {
   bottom: -7px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='8'%3E%3Cpolygon points='0,0 8,8 16,0' fill='%23FCFBF7'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='8'%3E%3Cpolygon points='0,0 8,8 16,0' fill='%23FCFBFD'/%3E%3C/svg%3E");
 }
 
 /* Dot leader for receipt lines */

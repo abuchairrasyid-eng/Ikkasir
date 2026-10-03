@@ -6,6 +6,7 @@ import { StorageService, formatRupiah, playCashRegisterSound, playTapSound } fro
 import { LoginView } from './components/LoginView';
 import { SidebarRail } from './components/SidebarRail';
 import { KasirView } from './components/KasirView';
+import { TransaksiView } from './components/TransaksiView';
 import { OrderPanel } from './components/OrderPanel';
 import { LaporanView } from './components/LaporanView';
 import { ProdukView } from './components/ProdukView';
@@ -24,7 +25,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(() => StorageService.getStoredUser());
   const [welcomeUser, setWelcomeUser] = useState<User | null>(null);
   const [config, setConfig] = useState<AppConfig>(() => StorageService.getConfig());
-  const [activeView, setActiveView] = useState<ActiveView>('kasir');
+  const [activeView, setActiveView] = useState<ActiveView>('menu');
 
   const [produk, setProduk] = useState<Produk[]>(() => StorageService.getProduk());
   const [transaksi, setTransaksi] = useState<Transaksi[]>(() => StorageService.getTransaksi());
@@ -32,6 +33,7 @@ export default function App() {
 
   const [cart, setCart] = useState<Record<string, CartItem>>({});
   const [lastAddedId, setLastAddedId] = useState<string | null>(null);
+  const [kategoriNonaktif, setKategoriNonaktif] = useState<string[]>(() => StorageService.getKategoriNonaktif());
 
   const [isOrderPanelOpenMobile, setIsOrderPanelOpenMobile] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -45,6 +47,7 @@ export default function App() {
     diskon: number;
     bayar: number;
     kembalian: number;
+    tip?: number;
   } | null>(null);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -66,7 +69,19 @@ export default function App() {
     setProduk(StorageService.getProduk());
     setTransaksi(StorageService.getTransaksi());
     setUsers(StorageService.getUsers());
+    setKategoriNonaktif(StorageService.getKategoriNonaktif());
   }, []);
+
+  const handleToggleKategoriAktif = (cat: string) => {
+    const updated = StorageService.toggleKategoriAktif(cat);
+    setKategoriNonaktif(updated);
+    const isInactive = updated.includes(cat);
+    showToast(
+      isInactive
+        ? `Kategori "${cat}" dinonaktifkan dari kasir.`
+        : `Kategori "${cat}" diaktifkan kembali di kasir.`
+    );
+  };
 
   // Sinkronisasi dengan Google Sheets (aktif jika Mode Cloud)
   useEffect(() => {
@@ -214,12 +229,24 @@ export default function App() {
   };
 
   // Split bill confirmation
-  const handleConfirmSplitBill = (splits: { orang: number; perOrang: number; metode: PaymentMethod }[]) => {
+  const handleConfirmSplitBill = (
+    splits: import('./types').SplitBillDetail[],
+    printMode: 'combined' | 'separate' = 'combined'
+  ) => {
     if (!user) return;
     const items = Object.values(cart);
     if (items.length === 0) return;
 
     const subtotal = items.reduce((s, it) => s + it.harga * it.qty, 0);
+    const splitNotes = splits
+      .map(
+        s =>
+          `${s.label || `Orang #${s.orang}`}: ${formatRupiah(s.perOrang)} (${s.metode})${
+            s.itemsSummary ? ` [${s.itemsSummary}]` : ''
+          }`
+      )
+      .join(' | ');
+
     let newTx: Transaksi;
 
     if (resumedTxId) {
@@ -233,20 +260,26 @@ export default function App() {
         kembalian: 0,
         status: 'Selesai',
         isSplitBill: true,
-        catatan: `Split Bill (${splits.length} orang: ${splits.map(s => `#${s.orang} via ${s.metode}`).join(', ')})`,
+        splitDetails: splits,
+        splitPrintMode: printMode,
+        catatan: `Split Bill: ${splitNotes}`,
       });
-      newTx = updated || StorageService.addTransaksi({
-        kasir: user.nama,
-        items,
-        diskon: 0,
-        metodeBayar: splits[0]?.metode || 'Tunai',
-        total: subtotal,
-        bayar: subtotal,
-        kembalian: 0,
-        status: 'Selesai',
-        isSplitBill: true,
-        catatan: `Split Bill (${splits.length} orang: ${splits.map(s => `#${s.orang} via ${s.metode}`).join(', ')})`,
-      });
+      newTx =
+        updated ||
+        StorageService.addTransaksi({
+          kasir: user.nama,
+          items,
+          diskon: 0,
+          metodeBayar: splits[0]?.metode || 'Tunai',
+          total: subtotal,
+          bayar: subtotal,
+          kembalian: 0,
+          status: 'Selesai',
+          isSplitBill: true,
+          splitDetails: splits,
+          splitPrintMode: printMode,
+          catatan: `Split Bill: ${splitNotes}`,
+        });
       setResumedTxId(null);
     } else {
       newTx = StorageService.addTransaksi({
@@ -259,7 +292,9 @@ export default function App() {
         kembalian: 0,
         status: 'Selesai',
         isSplitBill: true,
-        catatan: `Split Bill (${splits.length} orang: ${splits.map(s => `#${s.orang} via ${s.metode}`).join(', ')})`,
+        splitDetails: splits,
+        splitPrintMode: printMode,
+        catatan: `Split Bill: ${splitNotes}`,
       });
     }
 
@@ -315,7 +350,8 @@ export default function App() {
     metode: PaymentMethod,
     diskon: number,
     bayar: number,
-    kembalian: number
+    kembalian: number,
+    tip?: number
   ) => {
     if (!user) return;
     const items = Object.values(cart);
@@ -334,6 +370,7 @@ export default function App() {
         total,
         bayar,
         kembalian,
+        tip: tip || 0,
         status: 'Selesai',
       });
       finalTx = updated || StorageService.addTransaksi({
@@ -344,6 +381,7 @@ export default function App() {
         total,
         bayar,
         kembalian,
+        tip: tip || 0,
         status: 'Selesai',
       });
       setResumedTxId(null);
@@ -356,6 +394,7 @@ export default function App() {
         total,
         bayar,
         kembalian,
+        tip: tip || 0,
         status: 'Selesai',
       });
     }
@@ -367,8 +406,10 @@ export default function App() {
     reloadData();
 
     showToast(
-      kembalian > 0
-        ? `Pesanan Selesai. Kembalian ${formatRupiah(kembalian)}`
+      tip && tip > 0
+        ? `Pesanan Selesai. Tip diterima: ${formatRupiah(tip)}. Terima kasih!`
+        : kembalian > 0
+        ? `Pesanan Selesai. Kembalian: ${formatRupiah(kembalian)}`
         : 'Pesanan Selesai.'
     );
 
@@ -381,21 +422,34 @@ export default function App() {
     metode: PaymentMethod,
     diskon: number,
     bayar: number,
-    kembalian: number
+    kembalian: number,
+    tip?: number
   ) => {
-    // If barcode is disabled (e.g. cashier uses EDC / ADC device / standee), finish directly without QR pop-up
-    const showBarcode = Boolean(config.qrisBarcodeEnabled ?? config.qrisPopupEnabled ?? false);
+    // If barcode popup is enabled (default true), display QR code pop-up for cashier/customer
+    const showBarcode = Boolean(config.qrisBarcodeEnabled ?? config.qrisPopupEnabled ?? true);
     if (metode === 'QRIS' && showBarcode) {
-      setQrisPending({ diskon, bayar, kembalian });
+      setQrisPending({ diskon, bayar, kembalian, tip });
     } else {
-      executeOrderCompletion(metode, diskon, bayar, kembalian);
+      executeOrderCompletion(metode, diskon, bayar, kembalian, tip);
     }
+  };
+
+  // Preview / Manual trigger QRIS on screen
+  const handleShowQrisModal = () => {
+    const subtotal = Object.values(cart).reduce((s, it) => s + it.harga * it.qty, 0);
+    setQrisPending({ diskon: 0, bayar: subtotal, kembalian: 0 });
   };
 
   // Confirm QRIS payment
   const handleConfirmQRIS = () => {
     if (!qrisPending) return;
-    executeOrderCompletion('QRIS', qrisPending.diskon, qrisPending.bayar, qrisPending.kembalian);
+    executeOrderCompletion(
+      'QRIS',
+      qrisPending.diskon,
+      qrisPending.bayar,
+      qrisPending.kembalian,
+      qrisPending.tip
+    );
     setQrisPending(null);
   };
 
@@ -484,9 +538,9 @@ export default function App() {
     setCart(newCart);
     setResumedTxId(id); // pembayaran nanti memperbarui nota yang sama, bukan membuat nota baru
     reloadData();
-    setActiveView('kasir');
+    setActiveView('menu');
     setIsOrderPanelOpenMobile(true);
-    showToast(`Open Bill ${data.namaPelanggan || data.nomorMeja || id} dibuka ke keranjang.`);
+    showToast(`Open Bill ${data.namaPelanggan || id} dibuka ke keranjang.`);
   };
 
   const handleCancelOpenBill = (id: string) => {
@@ -549,22 +603,22 @@ export default function App() {
     return Object.values(cart).reduce((sum, it) => sum + it.harga * it.qty, 0);
   }, [cart]);
 
-  // Open Bill = pesanan yang sudah dilayani tetapi belum dibayar.
-  // Status 'Ditahan' (fitur lama) tetap ditampilkan di sini agar data lama tidak hilang.
   const openBills = useMemo(() => {
-    return transaksi.filter(t => t.status === 'OpenBill' || t.status === 'Ditahan');
+    return (transaksi || []).filter(t => t.status === 'OpenBill' || t.status === 'Ditahan');
   }, [transaksi]);
 
   const pendingAccCount = useMemo(() => {
     return transaksi.filter(t => t.status === 'MenungguKoreksi').length;
   }, [transaksi]);
 
-  // Guard: akun staf/kasir otomatis dialihkan ke tab kasir jika mencoba membuka tab admin
+  // Guard: jika akun kasir mencoba membuka tab khusus admin (laporan, produk, akun), alihkan ke menu
   useEffect(() => {
-    if (user && user.peran === 'Kasir' && activeView !== 'kasir') {
-      setActiveView('kasir');
+    const role = (user?.peran || '').toLowerCase();
+    const isOwnerOrAdmin = role === 'owner' || role === 'admin';
+    if (!isOwnerOrAdmin && (activeView === 'laporan' || activeView === 'produk' || activeView === 'akun')) {
+      setActiveView('menu');
     }
-  }, [user, activeView]);
+  }, [user?.peran, activeView]);
 
   // If not logged in, show Login view
   if (!user) {
@@ -597,24 +651,33 @@ export default function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         namaToko={config.namaToko}
         pendingAccCount={pendingAccCount}
+        openBillsCount={openBills.length}
       />
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto px-5 sm:px-8 py-6 md:py-8 max-w-full">
         <div className="max-w-6xl mx-auto">
-          {activeView === 'kasir' && (
+          {(activeView === 'menu' || (activeView as string) === 'kasir') && (
             <KasirView
               produk={produk}
               cart={cart}
               onAddToCart={handleAddToCart}
               onUpdateQty={handleUpdateQty}
+              kategoriNonaktif={kategoriNonaktif}
+              user={user}
+              lastAddedId={lastAddedId}
+            />
+          )}
+
+          {activeView === 'transaksi' && (
+            <TransaksiView
               openBills={openBills}
               onResumeOpenBill={handleResumeOpenBill}
               onCancelOpenBill={handleCancelOpenBill}
-              recentTransactions={transaksi.filter(t => user.peran === 'Owner' || user.peran === 'Admin' || t.kasir === user.nama)}
+              recentTransactions={transaksi}
               onBukaLaporSalahInput={tx => setSelectedTxForSalahInput(tx)}
+              onViewReceipt={tx => setReceiptModalTx(tx)}
               user={user}
-              lastAddedId={lastAddedId}
             />
           )}
 
@@ -637,6 +700,8 @@ export default function App() {
               onUpdateProduk={handleUpdateProduk}
               onDeleteProduk={handleDeleteProduk}
               onToggleAktif={handleToggleProdukAktif}
+              kategoriNonaktif={kategoriNonaktif}
+              onToggleKategoriAktif={handleToggleKategoriAktif}
             />
           )}
 
@@ -652,7 +717,7 @@ export default function App() {
       </main>
 
       {/* Right Order Panel (Receipt Bon on Desktop / Slide-up Sheet on Mobile) */}
-      {activeView === 'kasir' && (
+      {(activeView === 'menu' || (activeView as string) === 'kasir' || activeView === 'transaksi') && (
         <OrderPanel
           cart={cart}
           onUpdateQty={handleUpdateQty}
@@ -666,12 +731,15 @@ export default function App() {
           onOpenSplitBill={() => setIsSplitBillOpen(true)}
           onOpenOpenBill={() => setIsOpenBillModalOpen(true)}
           qrisEnabled={config.qrisEnabled !== false}
+          qrisBarcodeEnabled={Boolean(config.qrisBarcodeEnabled ?? config.qrisPopupEnabled ?? true)}
+          onShowQrisModal={handleShowQrisModal}
           diskonEnabled={config.diskonEnabled !== false}
+          tipEnabled={config.tipEnabled !== false}
         />
       )}
 
       {/* Mobile Floating Cart Action Bar */}
-      {activeView === 'kasir' && cartItemCount > 0 && !isOrderPanelOpenMobile && (
+      {(activeView === 'menu' || (activeView as string) === 'kasir' || activeView === 'transaksi') && cartItemCount > 0 && !isOrderPanelOpenMobile && (
         <button
           type="button"
           onClick={() => setIsOrderPanelOpenMobile(true)}
@@ -702,7 +770,7 @@ export default function App() {
         />
       )}
 
-      {/* Open Bill Modal (Simpan Meja) */}
+      {/* Open Bill Modal */}
       {isOpenBillModalOpen && (
         <OpenBillModal
           items={Object.values(cart)}
