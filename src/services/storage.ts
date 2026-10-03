@@ -14,6 +14,7 @@ const STORAGE_KEYS = {
   PRODUK: 'kasir_produk_db',
   TRANSAKSI: 'kasir_transaksi_db',
   CONFIG: 'kasir_config_db',
+  KATEGORI_NONAKTIF: 'kasir_kategori_nonaktif_db',
 };
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -24,9 +25,10 @@ export const DEFAULT_CONFIG: AppConfig = {
   mode: CLOUD_ON ? 'cloud' : 'local',
   soundEnabled: true,
   qrisEnabled: true,
-  qrisBarcodeEnabled: false, // Default false: barcode tidak muncul jika kasir memakai EDC/ADC fisik, metode tetap aktif
-  qrisPopupEnabled: false,
+  qrisBarcodeEnabled: true, // Default true: kode QR interaktif otomatis muncul di layar saat pembayaran QRIS
+  qrisPopupEnabled: true,
   diskonEnabled: true,
+  tipEnabled: true,
   bluetoothPrinterEnabled: false,
   bluetoothDeviceName: '',
 };
@@ -89,7 +91,7 @@ export const INITIAL_PRODUK: Produk[] = [
     id: 'p-5',
     nama: 'Kopi Susu Gula Aren',
     harga: 18000,
-    kategori: 'Minuman',
+    kategori: 'Kopi',
     aktif: true,
     adaPilihanSuhu: true,
   },
@@ -97,7 +99,7 @@ export const INITIAL_PRODUK: Produk[] = [
     id: 'p-6',
     nama: 'Matcha Latte Espresso',
     harga: 24000,
-    kategori: 'Minuman',
+    kategori: 'Non Kopi',
     aktif: true,
     adaPilihanSuhu: true,
   },
@@ -105,7 +107,7 @@ export const INITIAL_PRODUK: Produk[] = [
     id: 'p-7',
     nama: 'Es Teh Manis Melati',
     harga: 8000,
-    kategori: 'Minuman',
+    kategori: 'Teh',
     aktif: true,
     adaPilihanSuhu: true,
   },
@@ -113,7 +115,7 @@ export const INITIAL_PRODUK: Produk[] = [
     id: 'p-8',
     nama: 'Fresh Lemon Tea Honey',
     harga: 14000,
-    kategori: 'Minuman',
+    kategori: 'Teh',
     aktif: true,
     adaPilihanSuhu: true,
   },
@@ -294,6 +296,12 @@ function generateSeedTransactions(): Transaksi[] {
 }
 
 // Storage Access & Sync
+// Title Case Helper: Huruf besar setiap kata
+function toTitleCase(str: string): string {
+  if (!str) return '';
+  return str.replace(/(^|\s+)([a-zA-Z\u00C0-\u017F])/g, (_, space, char) => `${space}${char.toUpperCase()}`);
+}
+
 export const StorageService = {
   getConfig(): AppConfig {
     const raw = localStorage.getItem(STORAGE_KEYS.CONFIG);
@@ -378,11 +386,64 @@ export const StorageService = {
     }
     try {
       const items: Produk[] = JSON.parse(raw);
-      // Ensure all initial items are active and not blocked by old zero stock values
-      return items.map(p => ({ ...p, aktif: p.aktif !== false }));
+      let needsSave = false;
+
+      // Migrate legacy drink categories ("Minuman", "Minuman Kopi", "Teh & Non-Kopi")
+      const updated = items.map(p => {
+        let cat = p.kategori;
+        const lowCat = (cat || '').toLowerCase();
+        const lowName = (p.nama || '').toLowerCase();
+
+        if (lowCat === 'minuman' || lowCat === 'minuman kopi' || lowCat.includes('teh & non-kopi')) {
+          if (lowName.includes('kopi') || lowCat.includes('kopi')) {
+            cat = 'Kopi';
+          } else if (lowName.includes('teh') || lowName.includes('tea')) {
+            cat = 'Teh';
+          } else {
+            cat = 'Non Kopi';
+          }
+          needsSave = true;
+        }
+
+        return {
+          ...p,
+          kategori: cat,
+          aktif: p.aktif !== false,
+        };
+      });
+
+      if (needsSave) {
+        localStorage.setItem(STORAGE_KEYS.PRODUK, JSON.stringify(updated));
+      }
+
+      return updated;
     } catch {
       return INITIAL_PRODUK;
     }
+  },
+
+  getKategoriNonaktif(): string[] {
+    const raw = localStorage.getItem(STORAGE_KEYS.KATEGORI_NONAKTIF);
+    if (!raw) return [];
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  },
+
+  saveKategoriNonaktif(list: string[]) {
+    localStorage.setItem(STORAGE_KEYS.KATEGORI_NONAKTIF, JSON.stringify(list));
+  },
+
+  toggleKategoriAktif(kategori: string): string[] {
+    const current = this.getKategoriNonaktif();
+    const isInactive = current.includes(kategori);
+    const updated = isInactive
+      ? current.filter(c => c !== kategori)
+      : [...current, kategori];
+    this.saveKategoriNonaktif(updated);
+    return updated;
   },
 
   saveProduk(produk: Produk[]) {
@@ -395,6 +456,7 @@ export const StorageService = {
     const list = this.getProduk();
     const newProduk: Produk = {
       ...item,
+      nama: toTitleCase(item.nama.trim()),
       id: 'p-' + Date.now(),
     };
     list.unshift(newProduk);
@@ -403,7 +465,15 @@ export const StorageService = {
   },
 
   updateProduk(id: string, updates: Partial<Produk>) {
-    const list = this.getProduk().map(p => (p.id === id ? { ...p, ...updates } : p));
+    const list = this.getProduk().map(p =>
+      p.id === id
+        ? {
+            ...p,
+            ...updates,
+            nama: updates.nama ? toTitleCase(updates.nama.trim()) : p.nama,
+          }
+        : p
+    );
     this.saveProduk(list);
   },
 

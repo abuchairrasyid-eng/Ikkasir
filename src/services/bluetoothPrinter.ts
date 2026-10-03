@@ -274,6 +274,11 @@ class BluetoothPrinterService {
         const bayarStr = (transaksi.bayar || transaksi.total).toLocaleString('id-ID');
         parts.push(...encoder.encode(`Bayar${' '.repeat(Math.max(1, 27 - bayarStr.length))}${bayarStr}\n`));
 
+        if (transaksi.tip && transaksi.tip > 0) {
+          const tipStr = `+${transaksi.tip.toLocaleString('id-ID')}`;
+          parts.push(...encoder.encode(`Tip/Ikhlas${' '.repeat(Math.max(1, 22 - tipStr.length))}${tipStr}\n`));
+        }
+
         const kembaliStr = (transaksi.kembalian || 0).toLocaleString('id-ID');
         parts.push(...encoder.encode(`Kembali${' '.repeat(Math.max(1, 25 - kembaliStr.length))}${kembaliStr}\n`));
       }
@@ -304,6 +309,80 @@ class BluetoothPrinterService {
     namaToko: string
   ): Promise<boolean> {
     const bytes = this.buildReceiptBytes(transaksi, slipType, namaToko);
+    return await this.sendRawBytes(bytes);
+  }
+
+  // Build ESC/POS Thermal Receipt for a single person in Split Bill
+  buildSeparatePersonReceiptBytes(
+    transaksi: Transaksi,
+    detail: import('../types').SplitBillDetail,
+    namaToko: string
+  ): Uint8Array {
+    const encoder = new TextEncoder();
+    const parts: number[] = [];
+    const ESC = 0x1b;
+    const GS = 0x1d;
+
+    parts.push(ESC, 0x40); // Init
+    parts.push(ESC, 0x74, 0x00);
+    parts.push(ESC, 0x61, 0x01); // Center
+    parts.push(ESC, 0x45, 0x01); // Bold
+    parts.push(GS, 0x21, 0x11);
+    parts.push(...encoder.encode(`${namaToko.toUpperCase()}\n`));
+    parts.push(GS, 0x21, 0x00);
+    parts.push(ESC, 0x45, 0x00);
+
+    parts.push(...encoder.encode(`STRUK SPLIT - ${detail.label || `ORANG #${detail.orang}`}\n`));
+    parts.push(...encoder.encode('--------------------------------\n'));
+
+    // Align Left
+    parts.push(ESC, 0x61, 0x00);
+    parts.push(...encoder.encode(`No. Nota : ${transaksi.id}\n`));
+    parts.push(...encoder.encode(`Waktu    : ${formatDateTime(transaksi.tanggal)}\n`));
+    parts.push(...encoder.encode(`Kasir    : ${transaksi.kasir}\n`));
+    parts.push(...encoder.encode(`Bagian   : ${detail.label || `Orang #${detail.orang}`}\n`));
+    parts.push(...encoder.encode('--------------------------------\n'));
+
+    // Items for this person
+    const itemsToPrint = detail.items && detail.items.length > 0 ? detail.items : [];
+    if (itemsToPrint.length > 0) {
+      itemsToPrint.forEach(it => {
+        const itemLine = `${it.nama}${it.suhu ? ` [${it.suhu}]` : ''}`;
+        parts.push(...encoder.encode(`${itemLine}\n`));
+        const subLine = `  ${it.qty} x ${it.harga.toLocaleString('id-ID')}`;
+        const totalLine = (it.qty * it.harga).toLocaleString('id-ID');
+        const spaces = Math.max(1, 32 - subLine.length - totalLine.length);
+        parts.push(...encoder.encode(`${subLine}${' '.repeat(spaces)}${totalLine}\n`));
+      });
+    } else {
+      parts.push(...encoder.encode(`Rincian  : ${detail.itemsSummary || 'Bagi Rata'}\n`));
+    }
+
+    parts.push(...encoder.encode('--------------------------------\n'));
+    // Total
+    parts.push(ESC, 0x45, 0x01);
+    const totalStr = detail.perOrang.toLocaleString('id-ID');
+    parts.push(...encoder.encode(`TOTAL${' '.repeat(Math.max(1, 27 - totalStr.length))}${totalStr}\n`));
+    parts.push(ESC, 0x45, 0x00);
+    parts.push(...encoder.encode(`Metode   : ${detail.metode}\n`));
+    parts.push(...encoder.encode('Status   : LUNAS\n'));
+    parts.push(...encoder.encode('--------------------------------\n'));
+
+    // Center Align Footer
+    parts.push(ESC, 0x61, 0x01);
+    parts.push(...encoder.encode('Terima kasih atas kunjungan Anda!\n'));
+    parts.push(...encoder.encode('Silakan datang kembali.\n\n\n'));
+    parts.push(GS, 0x56, 0x42, 0x00); // Cut
+
+    return new Uint8Array(parts);
+  }
+
+  async printPersonSlip(
+    transaksi: Transaksi,
+    detail: import('../types').SplitBillDetail,
+    namaToko: string
+  ): Promise<boolean> {
+    const bytes = this.buildSeparatePersonReceiptBytes(transaksi, detail, namaToko);
     return await this.sendRawBytes(bytes);
   }
 

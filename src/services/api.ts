@@ -184,13 +184,17 @@ export const ApiClient = {
 
       case 'login': {
         const { username, password } = (payload || {}) as { username?: string; password?: string };
+        const cleanInput = (username || '').trim().toLowerCase();
         const users = StorageService.getUsers();
-        const found = users.find(u => u.username.toLowerCase() === (username || '').toLowerCase());
+        // Case-insensitive comparison: match against username or display name
+        const found = users.find(
+          u => u.username.trim().toLowerCase() === cleanInput || u.nama.trim().toLowerCase() === cleanInput
+        );
         if (!found) {
           return { ok: false, error: 'Username tidak ditemukan.' };
         }
-        if (found.password && found.password !== password) {
-          return { ok: false, error: 'Password salah.' };
+        if (found.password && String(found.password).trim() !== String(password || '').trim()) {
+          return { ok: false, error: 'PIN / Password salah.' };
         }
         return {
           ok: true,
