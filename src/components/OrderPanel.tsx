@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { CartItem, PaymentMethod } from '../types';
 import { formatRupiah } from '../services/storage';
-import { X, Plus, Minus, MessageSquare, Trash2, Snowflake, Flame, Split, BookmarkPlus } from 'lucide-react';
+import { X, Plus, Minus, MessageSquare, Trash2, Snowflake, Flame, Split, BookmarkPlus, Banknote, Coins, QrCode, Heart } from 'lucide-react';
 
 interface OrderPanelProps {
   cart: Record<string, CartItem>;
   onUpdateQty: (cartItemId: string, delta: number) => void;
   onClearCart: () => void;
-  onFinishOrder: (metode: PaymentMethod, diskon: number, bayar: number, kembalian: number) => void;
+  onFinishOrder: (metode: PaymentMethod, diskon: number, bayar: number, kembalian: number, tip?: number) => void;
   isOpenMobile: boolean;
   onCloseMobile: () => void;
   autoPrint: boolean;
@@ -16,7 +16,10 @@ interface OrderPanelProps {
   onOpenSplitBill?: () => void;
   onOpenOpenBill?: () => void;
   qrisEnabled?: boolean;
+  qrisBarcodeEnabled?: boolean;
+  onShowQrisModal?: () => void;
   diskonEnabled?: boolean;
+  tipEnabled?: boolean;
 }
 
 export const OrderPanel: React.FC<OrderPanelProps> = ({
@@ -32,12 +35,16 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
   onOpenSplitBill,
   onOpenOpenBill,
   qrisEnabled = true,
+  qrisBarcodeEnabled = true,
+  onShowQrisModal,
   diskonEnabled = true,
+  tipEnabled = true,
 }) => {
   const [clock, setClock] = useState('');
   const [diskonPersen, setDiskonPersen] = useState<number>(0);
   const [metodeBayar, setMetodeBayar] = useState<PaymentMethod>('Tunai');
   const [inputBayarRaw, setInputBayarRaw] = useState<string>('');
+  const [isTipChange, setIsTipChange] = useState<boolean>(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -60,7 +67,10 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
 
   const bayarNum = Number(inputBayarRaw) || 0;
   const kurang = totalAkhir > 0 && bayarNum > 0 && bayarNum < totalAkhir ? totalAkhir - bayarNum : 0;
-  const kembalian = bayarNum >= totalAkhir ? bayarNum - totalAkhir : 0;
+  const rawKembalian = bayarNum > totalAkhir ? bayarNum - totalAkhir : 0;
+  const effectiveTip = isTipChange && rawKembalian > 0 ? rawKembalian : 0;
+  const displayKembalian = rawKembalian - effectiveTip;
+  const kembalian = displayKembalian;
 
   // Tender chips for quick cash input
   const quickTenderOptions = React.useMemo(() => {
@@ -81,19 +91,30 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
   const handleFinish = () => {
     if (items.length === 0) return;
     const finalBayar = metodeBayar === 'Tunai' ? (bayarNum || totalAkhir) : totalAkhir;
-    const finalKembalian = metodeBayar === 'Tunai' ? (finalBayar >= totalAkhir ? finalBayar - totalAkhir : 0) : 0;
-    onFinishOrder(metodeBayar, nominalDiskon, finalBayar, finalKembalian);
+    const finalRawKembalian = metodeBayar === 'Tunai' ? (finalBayar > totalAkhir ? finalBayar - totalAkhir : 0) : 0;
+    const tipAmount = isTipChange && finalRawKembalian > 0 ? finalRawKembalian : 0;
+    const finalKembalian = finalRawKembalian - tipAmount;
+    onFinishOrder(metodeBayar, nominalDiskon, finalBayar, finalKembalian, tipAmount);
     setInputBayarRaw('');
     setDiskonPersen(0);
+    setIsTipChange(false);
   };
+
+  // Reset metode bayar jika QRIS dinonaktifkan di pengaturan
+  useEffect(() => {
+    if (!qrisEnabled && metodeBayar === 'QRIS') {
+      setMetodeBayar('Tunai');
+    }
+  }, [qrisEnabled, metodeBayar]);
 
   const handleCashChange = (val: string) => {
     const cleanDigits = val.replace(/\D/g, '');
     setInputBayarRaw(cleanDigits);
+    setIsTipChange(false);
   };
 
-  // Payment methods: Tunai, QRIS, Kartu (QRIS is always available to select)
-  const paymentMethods: PaymentMethod[] = ['Tunai', 'QRIS', 'Kartu'];
+  // Payment methods: Tunai & QRIS (Fitur Kartu dihapus)
+  const paymentMethods: PaymentMethod[] = qrisEnabled ? ['Tunai', 'QRIS'] : ['Tunai'];
 
   return (
     <>
@@ -110,7 +131,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
         className={`bg-[#E5E9E2] p-4 md:p-5 flex flex-col shrink-0 z-40
           fixed md:static inset-x-0 bottom-0 top-12 md:top-auto
           rounded-t-[32px] md:rounded-none transition-transform duration-300 ease-out
-          ${isOpenMobile ? 'translate-y-0' : 'translate-y-full md:translate-y-0'}
+          ${isOpenMobile ? 'translate-y-0 pointer-events-auto' : 'translate-y-full pointer-events-none md:pointer-events-auto md:translate-y-0'}
           w-full md:w-[380px] lg:w-[410px] select-none
         `}
       >
@@ -156,15 +177,17 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
               onClick={onOpenOpenBill}
               disabled={items.length === 0}
               className="py-1.5 px-2.5 rounded-xl border border-[#D8DED6] hover:border-[#1F4034] bg-white hover:bg-gray-50 text-xs font-semibold text-[#1B2521] flex items-center justify-center gap-1.5 transition-all active:scale-95 disabled:opacity-40 disabled:pointer-events-none shadow-2xs cursor-pointer"
-              title="Simpan pesanan sebagai Open Bill / Meja"
+              title="Simpan pesanan sebagai Open Bill"
             >
               <BookmarkPlus className="w-3.5 h-3.5 text-[#1F4034]" />
-              <span>Open Bill (Meja)</span>
+              <span>Open Bill</span>
             </button>
           </div>
 
-          {/* Items List */}
-          <div className="flex-1 overflow-y-auto divide-y divide-dotted divide-[#C9D0C8] my-2 pr-0.5">
+          {/* Middle Scrollable Section (Pesanan & Pembayaran) */}
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain my-2 pr-1 space-y-3">
+            {/* Items List */}
+            <div className="divide-y divide-dotted divide-[#C9D0C8]">
             {items.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center text-[#56635B] py-12">
                 <span className="font-serif italic text-sm text-[#56635B]">
@@ -285,11 +308,11 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                 </div>
               ))
             )}
-          </div>
+            </div>
 
-          {/* Calculations & Checkout */}
-          <div className="shrink-0 pt-2 border-t border-[#D8DED6] space-y-1.5">
-            <div className="flex items-baseline justify-between text-xs text-[#56635B]">
+            {/* Calculations & Payment Methods (Scrolls with items) */}
+            <div className="pt-2 border-t border-[#D8DED6] space-y-2">
+              <div className="flex items-baseline justify-between text-xs text-[#56635B]">
               <span>Subtotal</span>
               <i className="lead-dots" />
               <b className="text-[#1B2521] font-semibold font-mono">{formatRupiah(subtotal)}</b>
@@ -352,48 +375,52 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
               </div>
             )}
 
-            {/* Total Display */}
-            <div className="flex items-baseline justify-between mt-2 pt-2 border-t border-[#1B2521]">
-              <span className="font-serif text-base text-[#1B2521] font-medium">Total</span>
-              <span className="font-serif font-bold text-2xl md:text-3xl text-[#1B2521] tracking-tight">
-                {formatRupiah(totalAkhir)}
-              </span>
+            {/* Payment Method Selector (Tunai & QRIS) */}
+            <div className="grid grid-cols-2 gap-1.5 p-1 bg-[#EEF0EB] rounded-2xl mt-3 border border-[#D8DED6]/90 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setMetodeBayar('Tunai')}
+                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 ${
+                  metodeBayar === 'Tunai'
+                    ? 'bg-[#1F4034] text-[#F3EBDD] shadow-sm'
+                    : 'text-[#56635B] hover:text-[#1B2521] hover:bg-white/60'
+                }`}
+              >
+                <Banknote className="w-4 h-4" />
+                <span>Tunai (Cash)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMetodeBayar('QRIS')}
+                className={`py-2 px-3 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 ${
+                  metodeBayar === 'QRIS'
+                    ? 'bg-[#1F4034] text-[#F3EBDD] shadow-sm'
+                    : 'text-[#56635B] hover:text-[#1B2521] hover:bg-white/60'
+                }`}
+              >
+                <QrCode className="w-4 h-4" />
+                <span>QRIS</span>
+              </button>
             </div>
 
-            {/* Payment Method Selector */}
-            <div className="grid grid-cols-4 border border-[#D8DED6] rounded-xl overflow-hidden mt-2 bg-white/60">
-              {paymentMethods.map(m => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setMetodeBayar(m)}
-                  className={`py-2 text-xs font-medium transition-colors cursor-pointer border-r last:border-r-0 border-[#D8DED6] ${
-                    metodeBayar === m
-                      ? 'bg-[#1F4034] text-[#F3EBDD] font-semibold'
-                      : 'text-[#56635B] hover:text-[#1B2521]'
-                  }`}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-
-            {/* Cash Tender Module (Tampilan Uang Diterima Berbentuk Rupiah Sama Seperti Total) */}
+            {/* Cash Tender Module (Rapi, Kontras Jelas, & Nyaman Dilihat) */}
             {metodeBayar === 'Tunai' && (
-              <div className="mt-2 space-y-2 pt-2 bg-[#F1F3EF]/70 p-3 rounded-2xl border border-[#D8DED6]">
+              <div className="mt-2.5 space-y-2.5 bg-[#F6F7F3] p-3.5 rounded-2xl border border-[#D5DCD2] shadow-2xs">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-[#56635B] uppercase tracking-wider">
-                    Uang Diterima
-                  </span>
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#1F4034] uppercase tracking-wider">
+                    <Coins className="w-3.5 h-3.5 text-[#C2A06A]" />
+                    <span>Uang Diterima</span>
+                  </div>
                   {/* Live Rupiah Preview Badge */}
-                  <span className="text-xs font-serif font-bold text-[#7C5E2E] bg-white px-2.5 py-0.5 rounded-lg border border-[#D8DED6]">
+                  <span className="text-xs font-serif font-bold text-[#1F4034] bg-white px-2.5 py-0.5 rounded-lg border border-[#D8DED6] shadow-2xs">
                     {formatRupiah(bayarNum || totalAkhir)}
                   </span>
                 </div>
 
-                {/* Input Box shaped like Rupiah currency display */}
-                <div className="flex items-center justify-between bg-white px-3.5 py-2 rounded-xl border border-[#1F4034]/40 focus-within:border-[#1F4034] focus-within:ring-2 focus-within:ring-[#1F4034]/15 shadow-2xs">
-                  <span className="font-serif font-bold text-lg md:text-xl text-[#7C5E2E] select-none">
+                {/* Input Box berbentuk display Rupiah */}
+                <div className="flex items-center justify-between bg-white px-3.5 py-2 rounded-xl border-2 border-[#1F4034]/50 focus-within:border-[#1F4034] focus-within:ring-2 focus-within:ring-[#1F4034]/20 shadow-xs transition-all">
+                  <span className="font-serif font-bold text-lg md:text-xl text-[#7C5E2E] select-none pr-1">
                     Rp
                   </span>
                   <input
@@ -402,7 +429,7 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                     value={inputBayarRaw ? Number(inputBayarRaw).toLocaleString('id-ID') : ''}
                     onChange={e => handleCashChange(e.target.value)}
                     placeholder={totalAkhir ? Number(totalAkhir).toLocaleString('id-ID') : '0'}
-                    className="w-full text-right font-serif font-bold text-xl md:text-2xl text-[#1B2521] bg-transparent outline-none tracking-tight pl-2"
+                    className="w-full text-right font-serif font-bold text-2xl text-[#12241E] bg-transparent outline-none tracking-tight"
                   />
                 </div>
 
@@ -426,51 +453,164 @@ export const OrderPanel: React.FC<OrderPanelProps> = ({
                   </div>
                 )}
 
-                <div className="flex items-baseline justify-between text-xs pt-1.5 border-t border-[#D8DED6]/80">
-                  <span className={kurang > 0 ? 'text-[#A8392F] font-bold' : 'text-[#56635B] font-semibold'}>
-                    {kurang > 0 ? 'Kurang Bayar:' : 'Kembalian:'}
-                  </span>
-                  <span
-                    className={`font-serif font-bold text-lg md:text-xl ${
-                      kurang > 0
-                        ? 'text-[#A8392F]'
-                        : kembalian > 0
-                        ? 'text-[#2C6A4E]'
-                        : 'text-[#1B2521]'
-                    }`}
-                  >
-                    {kurang > 0 ? formatRupiah(kurang) : formatRupiah(kembalian)}
-                  </span>
+                {/* Fitur Tip Kasir / Pelanggan Tidak Ambil Kembalian */}
+                {rawKembalian > 0 && tipEnabled && (
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setIsTipChange(!isTipChange)}
+                      className={`w-full p-2.5 rounded-xl border text-xs transition-all cursor-pointer select-none active:scale-[0.99] flex items-center justify-between ${
+                        isTipChange
+                          ? 'bg-amber-500/15 border-amber-600/40 text-amber-950 shadow-2xs'
+                          : 'bg-white hover:bg-gray-50 border-[#D8DED6] text-[#56635B]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors ${
+                            isTipChange ? 'bg-amber-600 text-white shadow-2xs' : 'bg-gray-100 text-gray-400'
+                          }`}
+                        >
+                          <Heart className={`w-3.5 h-3.5 ${isTipChange ? 'fill-current' : ''}`} />
+                        </span>
+                        <div className="text-left">
+                          <span className="font-bold block text-xs text-[#1B2521]">
+                            {isTipChange ? 'Kembalian Jadi Tip' : 'Kembalian Jadi Tip?'}
+                          </span>
+                          <span className="text-[10px] text-[#56635B] block">
+                            {isTipChange
+                              ? `${formatRupiah(rawKembalian)} dicatat sebagai tip`
+                              : 'Klik jika kembalian dialihkan jadi tip'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <span
+                        className={`text-[10px] font-bold px-2.5 py-1 rounded-full border transition-all ${
+                          isTipChange
+                            ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                            : 'bg-white text-gray-700 border-gray-300'
+                        }`}
+                      >
+                        {isTipChange ? 'Tip Aktif' : 'Jadikan Tip'}
+                      </span>
+                    </button>
+                  </div>
+                )}
+
+                <div className="space-y-1.5 pt-1.5 border-t border-[#D5DCD2]">
+                  <div className="flex items-baseline justify-between text-xs">
+                    <span className={kurang > 0 ? 'text-[#A8392F] font-bold uppercase' : 'text-[#56635B] font-semibold'}>
+                      {kurang > 0 ? 'Kurang Bayar:' : 'Kembalian:'}
+                    </span>
+                    <span
+                      className={`font-serif font-bold text-xl ${
+                        kurang > 0
+                          ? 'text-[#A8392F]'
+                          : displayKembalian > 0
+                          ? 'text-[#1F4034]'
+                          : 'text-[#1B2521]'
+                      }`}
+                    >
+                      {kurang > 0 ? formatRupiah(kurang) : formatRupiah(displayKembalian)}
+                    </span>
+                  </div>
+
+                  {tipEnabled && isTipChange && effectiveTip > 0 && (
+                    <div className="flex items-center justify-between text-[11px] bg-amber-50 border border-amber-300/80 rounded-lg px-2.5 py-1 text-amber-900 font-semibold animate-fade-in">
+                      <span className="flex items-center gap-1.5">
+                        <Heart className="w-3.5 h-3.5 fill-amber-600 text-amber-600" />
+                        <span>Tip Diterima dari Pelanggan:</span>
+                      </span>
+                      <span className="font-mono font-bold text-amber-800">+{formatRupiah(effectiveTip)}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
 
-            {/* Checkout CTAs */}
-            <button
-              type="button"
-              onClick={handleFinish}
-              disabled={items.length === 0}
-              className="w-full mt-3 py-3 px-4 rounded-xl bg-[#1F4034] hover:bg-[#2B5646] active:scale-[0.98] text-[#F3EBDD] font-bold text-sm tracking-wide transition-all shadow-[inset_0_0_0_1px_rgba(194,160,106,0.55)] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-1.5"
-            >
-              <span>{autoPrint ? 'Selesaikan & Cetak' : 'Selesaikan Pesanan'}</span>
-              <span>&bull;</span>
-              <span>{formatRupiah(totalAkhir)}</span>
-            </button>
+            {/* QRIS Tender Info */}
+            {metodeBayar === 'QRIS' && (
+              <div className="mt-2.5 bg-[#F6F7F3] p-3.5 rounded-2xl border border-[#D5DCD2] space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#1F4034]">
+                    <QrCode className="w-4 h-4 text-[#C2A06A]" />
+                    <span>Pembayaran QRIS</span>
+                  </div>
+                  {qrisBarcodeEnabled ? (
+                    onShowQrisModal && (
+                      <button
+                        type="button"
+                        onClick={onShowQrisModal}
+                        className="text-[11px] text-[#1F4034] hover:bg-[#E5E9E2] font-semibold flex items-center gap-1 cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-[#D5DCD2] shadow-2xs transition-colors"
+                        title="Tampilkan Kode QR di layar kasir untuk discan pelanggan"
+                      >
+                        <QrCode className="w-3.5 h-3.5 text-[#C2A06A]" />
+                        <span>Tampilkan QR di Layar</span>
+                      </button>
+                    )
+                  ) : (
+                    <span className="text-[10px] text-[#56635B] bg-white px-2 py-0.5 rounded-full border border-[#D5DCD2] font-normal">
+                      Scan QR Kasir
+                    </span>
+                  )}
+                </div>
 
-            <div className="flex items-center justify-end pt-1 text-xs">
-              <button
-                type="button"
-                onClick={onClearCart}
-                disabled={items.length === 0}
-                className="text-[#A8392F] hover:underline underline-offset-4 font-semibold disabled:opacity-40 disabled:no-underline cursor-pointer flex items-center gap-1"
-              >
-                <Trash2 className="w-3 h-3" />
-                <span>Kosongkan</span>
-              </button>
-            </div>
+                <div className="flex items-center justify-between pt-1 border-t border-[#D5DCD2]/70 text-xs">
+                  <span className="text-[#56635B]">Tagihan QRIS:</span>
+                  <span className="font-serif font-bold text-[#1B2521] text-sm">
+                    {formatRupiah(totalAkhir)}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      </aside>
+
+        {/* Fixed Bottom Checkout Bar: Total, Selesaikan Pesanan, & Kosongkan */}
+        <div className="shrink-0 pt-2.5 border-t-2 border-[#1B2521]/15 bg-[#FCFBF7] space-y-2">
+          {/* Total Display */}
+          <div className="flex items-baseline justify-between">
+            <span className="font-serif text-base text-[#1B2521] font-medium">Total</span>
+            <span className="font-serif font-bold text-2xl md:text-3xl text-[#1B2521] tracking-tight">
+              {formatRupiah(totalAkhir)}
+            </span>
+          </div>
+
+          {/* Checkout CTAs */}
+          <button
+            type="button"
+            onClick={handleFinish}
+            disabled={items.length === 0}
+            className="w-full py-3 px-4 rounded-xl bg-[#1F4034] hover:bg-[#2B5646] active:scale-[0.98] text-[#F3EBDD] font-bold text-sm tracking-wide transition-all shadow-[inset_0_0_0_1px_rgba(197,160,89,0.55)] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-1.5"
+          >
+            <span>
+              {metodeBayar === 'QRIS'
+                ? qrisBarcodeEnabled
+                  ? 'Bayar via QRIS'
+                  : 'Selesaikan QRIS'
+                : autoPrint
+                ? 'Selesaikan & Cetak'
+                : 'Selesaikan Pesanan'}
+            </span>
+            <span>&bull;</span>
+            <span>{formatRupiah(totalAkhir)}</span>
+          </button>
+
+          <div className="flex items-center justify-end text-xs">
+            <button
+              type="button"
+              onClick={onClearCart}
+              disabled={items.length === 0}
+              className="text-[#A8392F] hover:underline underline-offset-4 font-semibold disabled:opacity-40 disabled:no-underline cursor-pointer flex items-center gap-1"
+            >
+              <Trash2 className="w-3 h-3" />
+              <span>Kosongkan</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </aside>
     </>
   );
 };

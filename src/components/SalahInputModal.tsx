@@ -66,7 +66,7 @@ export const SalahInputModal: React.FC<SalahInputModalProps> = ({
           <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
             <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
             <p className="leading-relaxed">
-              Pesanan ini akan ditandai <b>Menunggu Persetujuan Owner (ACC)</b>. Hanya pemilik toko (Owner) yang dapat menyetujui koreksi transaksi ini.
+              Pesanan ini akan diajukan ke Owner untuk disetujui atau dikoreksi.
             </p>
           </div>
 

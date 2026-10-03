@@ -33,6 +33,8 @@ interface ProdukViewProps {
   onUpdateProduk?: (id: string, updates: Partial<Produk>) => void;
   onDeleteProduk?: (id: string) => void;
   onToggleAktif: (id: string) => void;
+  kategoriNonaktif?: string[];
+  onToggleKategoriAktif?: (kategori: string) => void;
 }
 
 // Terbilang Rupiah Helper (e.g. 25000 -> Dua Puluh Lima Ribu Rupiah)
@@ -53,12 +55,20 @@ function terbilangRupiah(n: number): string {
   return sebut(n).replace(/\s+/g, ' ').trim() + ' Rupiah';
 }
 
+// Auto Title Case Helper (Huruf besar otomatis setiap awal kata)
+export function toTitleCase(str: string): string {
+  if (!str) return '';
+  return str.replace(/(^|\s+)([a-zA-Z\u00C0-\u017F])/g, (_, space, char) => `${space}${char.toUpperCase()}`);
+}
+
 export const ProdukView: React.FC<ProdukViewProps> = ({
   produk,
   onAddProduk,
   onUpdateProduk,
   onDeleteProduk,
   onToggleAktif,
+  kategoriNonaktif = [],
+  onToggleKategoriAktif,
 }) => {
   // References for smooth scroll & auto focus to input form
   const formRef = useRef<HTMLDivElement>(null);
@@ -81,13 +91,23 @@ export const ProdukView: React.FC<ProdukViewProps> = ({
 
   const categoryPresets = [
     'Makanan',
-    'Minuman',
-    'Minuman Kopi',
-    'Teh & Non-Kopi',
+    'Kopi',
+    'Teh',
+    'Non Kopi',
     'Snack',
     'Dessert',
     'Paket Promo',
   ];
+
+  const allCategories = React.useMemo(() => {
+    const list = [...categoryPresets];
+    produk.forEach(p => {
+      if (p.kategori && !list.includes(p.kategori)) {
+        list.push(p.kategori);
+      }
+    });
+    return list;
+  }, [produk]);
 
   // Common quick price shortcuts
   const priceShortcuts = [12000, 15000, 18000, 20000, 25000, 28000, 35000];
@@ -119,7 +139,7 @@ export const ProdukView: React.FC<ProdukViewProps> = ({
   // Fulfills requirement: "jika edit langsung naik ke input data otomatis"
   const startEditProduct = (p: Produk) => {
     setEditingId(p.id);
-    setNama(p.nama);
+    setNama(toTitleCase(p.nama));
     setHargaRaw(p.harga.toLocaleString('id-ID'));
     setKategori(p.kategori);
     setAdaPilihanSuhu(Boolean(p.adaPilihanSuhu));
@@ -176,7 +196,8 @@ export const ProdukView: React.FC<ProdukViewProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nama.trim() || numericHarga <= 0) {
+    const formattedNama = toTitleCase(nama.trim());
+    if (!formattedNama || numericHarga <= 0) {
       alert('Isi nama menu dan harga jual Rupiah yang valid.');
       return;
     }
@@ -185,7 +206,7 @@ export const ProdukView: React.FC<ProdukViewProps> = ({
 
     if (editingId && onUpdateProduk) {
       onUpdateProduk(editingId, {
-        nama: nama.trim(),
+        nama: formattedNama,
         harga: numericHarga,
         kategori: kategori.trim() || 'Lainnya',
         gambar: gambarBase64 || undefined,
@@ -196,7 +217,7 @@ export const ProdukView: React.FC<ProdukViewProps> = ({
       setEditingId(null);
     } else {
       onAddProduk({
-        nama: nama.trim(),
+        nama: formattedNama,
         harga: numericHarga,
         kategori: kategori.trim() || 'Lainnya',
         gambar: gambarBase64 || undefined,
@@ -237,9 +258,6 @@ export const ProdukView: React.FC<ProdukViewProps> = ({
           <h1 className="font-serif font-medium text-2xl sm:text-3xl text-[#1B2521] tracking-tight m-0">
             Katalog &amp; Manajemen Menu
           </h1>
-          <p className="text-xs sm:text-sm text-[#56635B] mt-1 font-sans">
-            Input menu dengan format Rupiah otomatis langsung tertera dan opsi Panas / Dingin.
-          </p>
         </div>
         {editingId && (
           <button
@@ -309,7 +327,8 @@ export const ProdukView: React.FC<ProdukViewProps> = ({
                   ref={nameInputRef}
                   type="text"
                   value={nama}
-                  onChange={e => setNama(e.target.value)}
+                  onChange={e => setNama(toTitleCase(e.target.value))}
+                  onBlur={() => setNama(prev => toTitleCase(prev.trim()))}
                   placeholder="misal: Kopi Susu Gula Aren, Nasi Goreng Spesial..."
                   className="w-full bg-white border border-[#D8DED6] rounded-xl px-3.5 py-2.5 text-sm text-[#1B2521] focus:outline-none focus:border-[#1F4034] shadow-2xs transition-colors"
                   required
@@ -613,11 +632,7 @@ export const ProdukView: React.FC<ProdukViewProps> = ({
               >
                 Batal Edit
               </button>
-            ) : (
-              <div className="text-xs text-[#56635B]">
-                Menu yang disimpan akan langsung muncul di katalog kasir.
-              </div>
-            )}
+            ) : null}
 
             <button
               type="submit"
@@ -631,6 +646,74 @@ export const ProdukView: React.FC<ProdukViewProps> = ({
         </form>
       </div>
 
+      {/* Kelola Status Kategori Menu (Fitur Nonaktifkan Kategori) */}
+      <div className="bg-[#FCFBF7] rounded-3xl p-5 sm:p-6 border border-[#D8DED6] shadow-2xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="font-serif font-medium text-lg text-[#1B2521] m-0 flex items-center gap-2">
+              <Utensils className="w-4 h-4 text-[#1F4034]" />
+              Status Kategori Menu
+            </h2>
+          </div>
+          {kategoriNonaktif.length > 0 && (
+            <span className="text-xs text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 font-medium">
+              {kategoriNonaktif.length} kategori dinonaktifkan dari kasir
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2.5">
+          {allCategories.map(cat => {
+            const isInactive = kategoriNonaktif.includes(cat);
+            const count = produk.filter(p => p.kategori === cat).length;
+            return (
+              <div
+                key={cat}
+                className={`p-3 rounded-2xl border transition-all flex flex-col justify-between gap-2.5 ${
+                  isInactive
+                    ? 'bg-gray-100/90 border-gray-300 opacity-80'
+                    : 'bg-white border-[#D8DED6] hover:border-[#1F4034]'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="font-semibold text-xs text-[#1B2521] truncate" title={cat}>
+                      {cat}
+                    </span>
+                    <span className="text-[10px] font-mono text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full">
+                      {count}
+                    </span>
+                  </div>
+                  <div className="mt-1">
+                    {isInactive ? (
+                      <span className="text-[10px] font-semibold text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
+                        Nonaktif
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                        Aktif
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => onToggleKategoriAktif?.(cat)}
+                  className={`w-full py-1.5 px-2 rounded-xl text-[11px] font-bold transition-all cursor-pointer text-center active:scale-95 ${
+                    isInactive
+                      ? 'bg-[#1F4034] text-[#F3EBDD] hover:bg-[#2B5646] shadow-xs'
+                      : 'border border-gray-300 hover:border-red-300 hover:bg-red-50 text-gray-700 hover:text-red-700'
+                  }`}
+                >
+                  {isInactive ? 'Aktifkan' : 'Nonaktifkan'}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Tabel Menu yang Tersedia */}
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -638,9 +721,6 @@ export const ProdukView: React.FC<ProdukViewProps> = ({
             <h2 className="font-serif font-medium text-xl text-[#1B2521] m-0">
               Daftar Menu Aktif ({produk.length})
             </h2>
-            <p className="text-xs text-[#56635B] mt-0.5">
-              Klik &ldquo;Edit&rdquo; untuk langsung naik ke form input otomatis, atau &ldquo;Hapus&rdquo; untuk konfirmasi.
-            </p>
           </div>
 
           <div className="relative w-full sm:w-72">
@@ -721,7 +801,16 @@ export const ProdukView: React.FC<ProdukViewProps> = ({
                         <td className="p-3 text-right font-serif font-bold text-sm text-[#7C5E2E] font-mono">
                           {formatRupiah(p.harga)}
                         </td>
-                        <td className="p-3 text-[#56635B]">{p.kategori || '-'}</td>
+                        <td className="p-3">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[#56635B]">{p.kategori || '-'}</span>
+                            {kategoriNonaktif.includes(p.kategori) && (
+                              <span className="text-[10px] text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.2 rounded font-medium">
+                                Kategori Nonaktif
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="p-3">
                           {p.adaPilihanSuhu ? (
                             <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-sky-50 text-sky-800 border border-sky-200">

@@ -186,15 +186,15 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }
       {/* Top Bar on Clean Landing Screen */}
       <header className="relative z-10 px-6 sm:px-10 py-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 border-2 border-[#1F4034] rounded-2xl flex items-center justify-center font-serif font-bold text-xl text-[#1F4034] bg-white shadow-2xs">
-            {namaToko.trim().charAt(0).toUpperCase() || 'K'}
+          <div className="w-10 h-10 border-2 border-[#1F4034] rounded-2xl flex items-center justify-center font-serif font-bold text-lg text-[#1F4034] bg-white shadow-2xs">
+            ik
           </div>
           <div>
             <span className="font-serif font-bold text-base text-[#12241E] leading-tight block">
-              {namaToko}
+              ikkasir
             </span>
             <span className="text-[11px] text-[#56635B] font-medium">
-              Sistem Kasir Pintar POS
+              {namaToko || 'Restoran & Kafe'}
             </span>
           </div>
         </div>
@@ -203,7 +203,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }
         <div className="hidden sm:flex items-center gap-3 text-xs text-[#56635B]">
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold text-[11px]">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Sistem Kasir Aktif</span>
+            <span>ikkasir Aktif</span>
           </div>
           <div className="flex items-center gap-1.5 font-mono text-[11px] text-[#1B2521] bg-white px-3 py-1 rounded-full border border-[#D8DED6] shadow-2xs">
             <Clock className="w-3.5 h-3.5 text-[#1F4034]" />
@@ -215,19 +215,20 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }
       {/* Hero Content with Clean "Masuk" CTA Button */}
       <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-6 py-12 text-center max-w-2xl mx-auto w-full">
         {/* Emblem Badge */}
-        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-[#12241E] text-[#F3EBDD] flex items-center justify-center shadow-xl border border-[#C2A06A]/40 mb-6 group transition-transform duration-300 hover:scale-105">
-          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border border-dashed border-[#C2A06A]/60 flex items-center justify-center font-serif font-bold text-3xl sm:text-4xl text-[#C2A06A]">
-            {namaToko.trim().charAt(0).toUpperCase() || 'K'}
+        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-[#12241E] text-[#F3EBDD] flex items-center justify-center shadow-xl border border-[#C2A06A]/40 mb-4 group transition-transform duration-300 hover:scale-105">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border border-dashed border-[#C2A06A]/60 flex items-center justify-center font-serif font-bold text-2xl sm:text-3xl text-[#C2A06A]">
+            ik
           </div>
+        </div>
+
+        <div className="text-xs uppercase tracking-widest font-bold text-[#1F4034] bg-[#1F4034]/10 px-3 py-1 rounded-full mb-3 border border-[#1F4034]/20 inline-block font-sans">
+          ikkasir
         </div>
 
         {/* Store Title & Slogan */}
         <h1 className="font-serif font-bold text-4xl sm:text-5xl md:text-6xl text-[#12241E] tracking-tight leading-[1.05] m-0">
           {namaToko}
         </h1>
-        <p className="mt-4 text-[#56635B] text-sm sm:text-base font-normal max-w-md mx-auto leading-relaxed">
-          Platform kasir cepat, pencatatan pesanan instan, dan pembukuan laporan otomatis untuk kelancaran operasional toko Anda.
-        </p>
 
         {/* Date & Terminal Info */}
         <div className="mt-3 text-xs text-[#56635B] font-medium">
@@ -255,15 +256,11 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, namaToko }
             <ArrowRight className="w-4 h-4 text-[#C2A06A] group-hover:translate-x-1 transition-transform" />
           </button>
         </div>
-
-        <div className="mt-4 text-[11px] text-[#56635B]">
-          Tekan <kbd className="px-1.5 py-0.5 rounded bg-white border border-[#D8DED6] font-mono text-[10px] text-gray-700 shadow-2xs">Enter</kbd> atau klik tombol di atas untuk membuka login PIN.
-        </div>
       </main>
 
       {/* Footer on Clean Landing Screen */}
       <footer className="relative z-10 px-6 py-4 text-center text-xs text-[#56635B]/80">
-        &copy; {new Date().getFullYear()} {namaToko}. Sistem POS Kasir Pintar.
+        &copy; {new Date().getFullYear()} {namaToko} &bull; ikkasir
       </footer>
 
       {/* ANIMATED POPUP MODAL LOGIN (Tampilan Hijau Elegan) */}

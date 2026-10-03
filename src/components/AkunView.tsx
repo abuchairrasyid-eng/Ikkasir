@@ -47,7 +47,6 @@ export const AkunView: React.FC<AkunViewProps> = ({
         <h1 className="font-serif font-medium text-2xl sm:text-3xl text-[#1B2521] tracking-tight m-0">
           Manajemen Akun &amp; Staf
         </h1>
-
       </div>
 
       {/* Add User Paper Form */}

@@ -18,24 +18,22 @@ export const WelcomeBanner: React.FC<WelcomeBannerProps> = ({ user, onDismiss })
       setTimeout(onDismiss, 180);
     };
 
-    // Attach listeners on window to dismiss IMMEDIATELY on any tap/click anywhere in the app
+    // Attach listeners on window to dismiss without capturing or blocking user clicks
     const timer = setTimeout(() => {
-      window.addEventListener('pointerdown', handleInstantDismiss, { capture: true, once: true });
-      window.addEventListener('touchstart', handleInstantDismiss, { capture: true, once: true });
-      window.addEventListener('keydown', handleInstantDismiss, { capture: true, once: true });
+      window.addEventListener('pointerdown', handleInstantDismiss, { once: true });
+      window.addEventListener('keydown', handleInstantDismiss, { once: true });
     }, 80);
 
-    // Auto-dismiss fallback after 4 seconds if no touch occurs
+    // Auto-dismiss fallback after 3 seconds if no touch occurs
     const autoDismiss = setTimeout(() => {
       handleInstantDismiss();
-    }, 4000);
+    }, 3000);
 
     return () => {
       clearTimeout(timer);
       clearTimeout(autoDismiss);
-      window.removeEventListener('pointerdown', handleInstantDismiss, { capture: true });
-      window.removeEventListener('touchstart', handleInstantDismiss, { capture: true });
-      window.removeEventListener('keydown', handleInstantDismiss, { capture: true });
+      window.removeEventListener('pointerdown', handleInstantDismiss);
+      window.removeEventListener('keydown', handleInstantDismiss);
     };
   }, [user, onDismiss]);
 
@@ -51,9 +49,9 @@ export const WelcomeBanner: React.FC<WelcomeBannerProps> = ({ user, onDismiss })
         setTimeout(onDismiss, 180);
       }}
       role="alert"
-      className={`fixed top-4 left-1/2 -translate-x-1/2 z-[250] transition-all duration-200 select-none cursor-pointer ${
+      className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-[300] transition-all duration-200 select-none cursor-pointer ${
         isClosing
-          ? 'opacity-0 -translate-y-4 scale-95 pointer-events-none'
+          ? 'opacity-0 translate-y-4 scale-95 pointer-events-none'
           : 'opacity-100 translate-y-0 scale-100 animate-spring-up'
       }`}
       title="Ketuk layar di mana saja untuk menutup"

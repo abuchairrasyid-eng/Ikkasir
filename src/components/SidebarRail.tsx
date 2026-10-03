@@ -1,6 +1,6 @@
 import React from 'react';
 import { ActiveView, User } from '../types';
-import { Receipt, BarChart3, UtensilsCrossed, Users, SlidersHorizontal, LogOut } from 'lucide-react';
+import { Receipt, BarChart3, UtensilsCrossed, Package, Users, SlidersHorizontal, LogOut } from 'lucide-react';
 
 interface SidebarRailProps {
   activeView: ActiveView;
@@ -10,6 +10,7 @@ interface SidebarRailProps {
   onOpenSettings: () => void;
   namaToko: string;
   pendingAccCount?: number;
+  openBillsCount?: number;
 }
 
 export const SidebarRail: React.FC<SidebarRailProps> = ({
@@ -20,12 +21,19 @@ export const SidebarRail: React.FC<SidebarRailProps> = ({
   onOpenSettings,
   namaToko,
   pendingAccCount = 0,
+  openBillsCount = 0,
 }) => {
   const isOwner = user.peran === 'Owner' || user.peran === 'Admin';
   const initial = user.nama.slice(0, 2).toUpperCase();
 
   const navItems: { id: ActiveView; label: string; icon: React.ReactNode; ownerOnly?: boolean; badge?: number }[] = [
-    { id: 'kasir', label: 'Kasir', icon: <Receipt className="w-5 h-5" /> },
+    { id: 'menu', label: 'Menu', icon: <UtensilsCrossed className="w-5 h-5" /> },
+    {
+      id: 'transaksi',
+      label: 'Transaksi',
+      icon: <Receipt className="w-5 h-5" />,
+      badge: openBillsCount > 0 ? openBillsCount : undefined,
+    },
     {
       id: 'laporan',
       label: 'Laporan',
@@ -33,7 +41,7 @@ export const SidebarRail: React.FC<SidebarRailProps> = ({
       badge: isOwner && pendingAccCount > 0 ? pendingAccCount : undefined,
       ownerOnly: true,
     },
-    { id: 'produk', label: 'Produk', icon: <UtensilsCrossed className="w-5 h-5" />, ownerOnly: true },
+    { id: 'produk', label: 'Produk', icon: <Package className="w-5 h-5" />, ownerOnly: true },
     { id: 'akun', label: 'Akun', icon: <Users className="w-5 h-5" />, ownerOnly: true },
   ];
 
@@ -43,17 +51,20 @@ export const SidebarRail: React.FC<SidebarRailProps> = ({
       <aside className="hidden md:flex flex-col items-center bg-[#12241E] text-[#8FA098] w-[88px] shrink-0 py-6 select-none z-20">
         {/* Brand Mark */}
         <div
-          title={namaToko}
-          className="w-11 h-11 border border-[#C2A06A] rounded-full flex items-center justify-center font-serif text-xl text-[#C2A06A] mb-8 shrink-0 shadow-sm"
+          title={`${namaToko} - ikkasir`}
+          className="w-11 h-11 border border-[#C2A06A] rounded-full flex items-center justify-center font-serif text-base font-bold text-[#C2A06A] mb-8 shrink-0 shadow-sm"
         >
-          {namaToko.trim().charAt(0).toUpperCase() || 'K'}
+          ik
         </div>
 
         {/* Navigation Items */}
         <nav className="flex flex-col w-full gap-2">
           {navItems.map(item => {
             if (item.ownerOnly && !isOwner) return null;
-            const isActive = activeView === item.id;
+            const isActive =
+              activeView === item.id ||
+              (item.id === 'menu' && (activeView as string) === 'kasir') ||
+              (item.id === 'kasir' && (activeView as string) === 'menu');
             return (
               <button
                 key={item.id}
@@ -62,19 +73,21 @@ export const SidebarRail: React.FC<SidebarRailProps> = ({
                 className={`relative w-full py-3.5 flex flex-col items-center gap-1.5 transition-colors cursor-pointer text-xs font-medium ${
                   isActive
                     ? 'text-[#C2A06A]'
-                    : 'text-[#8FA098] hover:text-[#C9D3CD]'
+                    : 'text-[#8FA098] hover:text-[#F3EBDD]'
                 }`}
               >
                 {isActive && (
                   <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-7 bg-[#C2A06A] rounded-r-md" />
                 )}
-                {item.icon}
+                <div className="relative inline-flex items-center justify-center">
+                  {item.icon}
+                  {item.badge !== undefined && item.badge > 0 && (
+                    <span className="absolute -top-1.5 -right-2.5 bg-amber-500 text-white text-[10px] font-bold min-w-4 h-4 px-1 rounded-full flex items-center justify-center shadow-xs">
+                      {item.badge}
+                    </span>
+                  )}
+                </div>
                 <span className="tracking-wide">{item.label}</span>
-                {item.badge !== undefined && item.badge > 0 && (
-                  <span className="absolute top-2 right-4 bg-amber-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center animate-bounce shadow-xs">
-                    {item.badge}
-                  </span>
-                )}
               </button>
             );
           })}
@@ -82,7 +95,7 @@ export const SidebarRail: React.FC<SidebarRailProps> = ({
           <button
             type="button"
             onClick={onOpenSettings}
-            className="relative w-full py-3.5 flex flex-col items-center gap-1.5 transition-colors cursor-pointer text-xs font-medium text-[#8FA098] hover:text-[#C9D3CD]"
+            className="relative w-full py-3.5 flex flex-col items-center gap-1.5 transition-colors cursor-pointer text-xs font-medium text-[#8FA098] hover:text-[#F3EBDD]"
           >
             <SlidersHorizontal className="w-5 h-5" />
             <span className="tracking-wide">Atur</span>
@@ -102,7 +115,7 @@ export const SidebarRail: React.FC<SidebarRailProps> = ({
             type="button"
             onClick={onLogout}
             title="Keluar"
-            className="p-2 text-[#8FA098] hover:text-[#E8B9AE] hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
+            className="p-2 text-[#8FA098] hover:text-rose-300 hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
           >
             <LogOut className="w-5 h-5" />
           </button>
@@ -113,7 +126,10 @@ export const SidebarRail: React.FC<SidebarRailProps> = ({
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#12241E] text-[#8FA098] border-t border-white/10 flex items-center justify-around h-16 pb-safe">
         {navItems.map(item => {
           if (item.ownerOnly && !isOwner) return null;
-          const isActive = activeView === item.id;
+          const isActive =
+            activeView === item.id ||
+            (item.id === 'menu' && (activeView as string) === 'kasir') ||
+            (item.id === 'kasir' && (activeView as string) === 'menu');
           return (
             <button
               key={item.id}
@@ -126,13 +142,15 @@ export const SidebarRail: React.FC<SidebarRailProps> = ({
               {isActive && (
                 <span className="absolute top-0 left-1/2 -translate-x-1/2 w-6 h-0.5 bg-[#C2A06A] rounded-b" />
               )}
-              {item.icon}
+              <div className="relative inline-flex items-center justify-center">
+                {item.icon}
+                {item.badge !== undefined && item.badge > 0 && (
+                  <span className="absolute -top-1.5 -right-2.5 bg-amber-500 text-white text-[9px] font-bold min-w-4 h-4 px-1 rounded-full flex items-center justify-center shadow-xs">
+                    {item.badge}
+                  </span>
+                )}
+              </div>
               <span>{item.label}</span>
-              {item.badge !== undefined && item.badge > 0 && (
-                <span className="absolute top-1 right-3 bg-amber-500 text-white text-[9px] font-bold w-3.5 h-3.5 rounded-full flex items-center justify-center animate-bounce">
-                  {item.badge}
-                </span>
-              )}
             </button>
           );
         })}

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, AppConfig } from '../types';
-import { X, Volume2, Printer, Store, RefreshCw, LogOut, QrCode, Percent, Bluetooth, CheckCircle2, AlertCircle } from 'lucide-react';
+import { X, Volume2, Printer, Store, RefreshCw, LogOut, QrCode, Percent, Bluetooth, CheckCircle2, AlertCircle, Heart } from 'lucide-react';
 import { BluetoothPrinter } from '../services/bluetoothPrinter';
 
 interface SettingsModalProps {
@@ -28,14 +28,34 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [qrisBarcodeEnabled, setQrisBarcodeEnabled] = useState(
     config.qrisBarcodeEnabled !== undefined 
       ? config.qrisBarcodeEnabled 
-      : (config.qrisPopupEnabled !== undefined ? config.qrisPopupEnabled : false)
+      : (config.qrisPopupEnabled !== undefined ? config.qrisPopupEnabled : true)
   );
   const [diskonEnabled, setDiskonEnabled] = useState(config.diskonEnabled !== false);
+  const [tipEnabled, setTipEnabled] = useState(config.tipEnabled !== false);
   const [bluetoothPrinterEnabled, setBluetoothPrinterEnabled] = useState(config.bluetoothPrinterEnabled || false);
   const [btConnected, setBtConnected] = useState(BluetoothPrinter.isConnected());
   const [btDeviceName, setBtDeviceName] = useState(BluetoothPrinter.getDeviceName());
   const [btStatusMsg, setBtStatusMsg] = useState('');
   const [btLoading, setBtLoading] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setNamaToko(config.namaToko);
+      setAutoPrint(config.autoPrint);
+      setSoundEnabled(config.soundEnabled);
+      setQrisBarcodeEnabled(
+        config.qrisBarcodeEnabled !== undefined 
+          ? config.qrisBarcodeEnabled 
+          : (config.qrisPopupEnabled !== undefined ? config.qrisPopupEnabled : true)
+      );
+      setDiskonEnabled(config.diskonEnabled !== false);
+      setTipEnabled(config.tipEnabled !== false);
+      setBluetoothPrinterEnabled(config.bluetoothPrinterEnabled || false);
+      setBtConnected(BluetoothPrinter.isConnected());
+      setBtDeviceName(BluetoothPrinter.getDeviceName());
+      setBtStatusMsg('');
+    }
+  }, [isOpen, config]);
 
   if (!isOpen) return null;
 
@@ -77,10 +97,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       namaToko: namaToko.trim() || 'Kasir',
       autoPrint,
       soundEnabled,
-      qrisEnabled: true, // QRIS payment is always available
+      qrisEnabled: true,
       qrisBarcodeEnabled,
       qrisPopupEnabled: qrisBarcodeEnabled,
       diskonEnabled,
+      tipEnabled,
       bluetoothPrinterEnabled,
       bluetoothDeviceName: btConnected ? btDeviceName : config.bluetoothDeviceName,
     });
@@ -134,9 +155,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               placeholder="Kasir"
               className="w-full bg-transparent border-0 border-b border-[#D8DED6] py-1.5 text-sm text-[#1B2521] focus:outline-none focus:border-b-[#1F4034]"
             />
-            <p className="text-[11px] text-gray-400">
-              Tampil di struk pembayaran, bon dapur/bar, dan logo aplikasi.
-            </p>
           </div>
 
           {/* Toggles */}
@@ -147,9 +165,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <Printer className="w-4 h-4 text-[#1F4034]" />
                   Cetak Struk Otomatis
                 </div>
-                <p className="text-xs text-[#56635B]">
-                  Buka dialog printer otomatis setelah pesanan selesai.
-                </p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
@@ -170,9 +185,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <Bluetooth className="w-4 h-4 text-blue-600" />
                     Printer Thermal Bluetooth (ESC/POS)
                   </div>
-                  <p className="text-xs text-[#56635B]">
-                    Aktifkan opsi cetak langsung ke printer mini/kasir 58mm atau 80mm via Bluetooth tanpa dialog browser.
-                  </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -240,9 +252,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <Volume2 className="w-4 h-4 text-[#1F4034]" />
                   Efek Suara Kasir
                 </div>
-                <p className="text-xs text-[#56635B]">
-                  Denting lonceng register saat pesanan sukses diselesaikan.
-                </p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
@@ -255,22 +264,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </label>
             </div>
 
-            {/* Toggle Barcode QRIS di Layar */}
+            {/* Opsi Tampilkan QR di Layar Kasir */}
             <div className="flex items-center justify-between gap-4 pt-3 border-t border-[#D8DED6]/70">
               <div>
                 <div className="text-sm font-medium text-[#1B2521] flex items-center gap-1.5">
                   <QrCode className="w-4 h-4 text-[#1F4034]" />
-                  Tampilkan Barcode QRIS di Layar
+                  Tampilkan QR di Layar Kasir
                 </div>
-                <p className="text-xs text-[#56635B]">
-                  Jika dinonaktifkan, metode pembayaran QRIS tetap ada dan bisa dipilih di kasir, tetapi barcode QR tidak muncul di layar (transaksi QRIS langsung selesai sukses).
+                <p className="text-xs text-[#56635B] mt-0.5">
+                  Tampilkan pop-up kode QR di layar saat kasir memilih pembayaran QRIS.
                 </p>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
+              <label className="relative inline-flex items-center cursor-pointer shrink-0">
                 <input
                   type="checkbox"
                   checked={qrisBarcodeEnabled}
                   onChange={e => setQrisBarcodeEnabled(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#1F4034]"></div>
+              </label>
+            </div>
+
+            {/* Toggle Fitur Tip Kasir */}
+            <div className="flex items-center justify-between gap-4 pt-3 border-t border-[#D8DED6]/70">
+              <div className="text-sm font-medium text-[#1B2521] flex items-center gap-1.5">
+                <Heart className="w-4 h-4 text-amber-600" />
+                Fitur Tip Kasir
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                <input
+                  type="checkbox"
+                  checked={tipEnabled}
+                  onChange={e => setTipEnabled(e.target.checked)}
                   className="sr-only peer"
                 />
                 <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#1F4034]"></div>
@@ -284,9 +310,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <Percent className="w-4 h-4 text-[#1F4034]" />
                   Fitur Diskon (%)
                 </div>
-                <p className="text-xs text-[#56635B]">
-                  Aktifkan baris diskon persentase saat pembayaran di kasir.
-                </p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input

@@ -18,6 +18,7 @@ import {
   BookmarkCheck,
   TrendingUp,
   Flame,
+  Heart,
 } from 'lucide-react';
 
 interface LaporanViewProps {
@@ -121,26 +122,24 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
     return countableTxs.reduce((sum, t) => sum + t.total, 0);
   }, [countableTxs]);
 
+  const totalTip = useMemo(() => {
+    return countableTxs.reduce((sum, t) => sum + (t.tip || 0), 0);
+  }, [countableTxs]);
+
   const jumlahTransaksi = countableTxs.length;
   const rataRata = jumlahTransaksi > 0 ? Math.round(totalPenjualan / jumlahTransaksi) : 0;
 
-  // Laporan Metode Pembayaran (Breakdown Tunai, QRIS, Kartu)
+  // Laporan Metode Pembayaran (Cukup Tunai dan QRIS)
   const paymentBreakdown = useMemo(() => {
-    const data: Record<PaymentMethod, { count: number; total: number }> = {
+    const data: Record<'Tunai' | 'QRIS', { count: number; total: number }> = {
       Tunai: { count: 0, total: 0 },
       QRIS: { count: 0, total: 0 },
-      Kartu: { count: 0, total: 0 },
     };
 
     countableTxs.forEach(t => {
-      const m = (t.metodeBayar as PaymentMethod) || 'Tunai';
-      if (data[m]) {
-        data[m].count += 1;
-        data[m].total += t.total;
-      } else {
-        data['Tunai'].count += 1;
-        data['Tunai'].total += t.total;
-      }
+      const m = t.metodeBayar === 'QRIS' ? 'QRIS' : 'Tunai';
+      data[m].count += 1;
+      data[m].total += t.total;
     });
 
     const totalAll = totalPenjualan || 1;
@@ -152,10 +151,6 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
       QRIS: {
         ...data.QRIS,
         percent: Math.round((data.QRIS.total / totalAll) * 100),
-      },
-      Kartu: {
-        ...data.Kartu,
-        percent: Math.round((data.Kartu.total / totalAll) * 100),
       },
     };
   }, [countableTxs, totalPenjualan]);
@@ -293,7 +288,7 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
 
   // CSV Export
   const handleExportCsv = () => {
-    const headers = ['ID Transaksi', 'Tanggal', 'Kasir', 'Metode Bayar', 'Status', 'Total (Rp)', 'Dibayar (Rp)', 'Item Pesanan', 'Catatan / Alasan Salah'];
+    const headers = ['ID Transaksi', 'Tanggal', 'Kasir', 'Metode Bayar', 'Status', 'Total (Rp)', 'Tip (Rp)', 'Dibayar (Rp)', 'Item Pesanan', 'Catatan / Alasan Salah'];
     const rows = filteredTxs.map(t => [
       t.id,
       t.tanggal,
@@ -301,6 +296,7 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
       t.metodeBayar,
       t.status,
       t.total,
+      t.tip || 0,
       t.bayar,
       t.items.map(i => `${i.nama}${i.suhu ? ` (${i.suhu})` : ''} x${i.qty}`).join('; '),
       t.alasanSalahInput || t.catatan || '',
@@ -383,11 +379,6 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
           <h1 className="font-serif font-medium text-2xl sm:text-3xl text-[#1B2521] tracking-tight m-0">
             Laporan Penjualan
           </h1>
-          <p className="text-xs sm:text-sm text-[#56635B] mt-1 font-sans">
-            {isOwner
-              ? 'Kelola omzet, unduh rekap CSV, dan setujui (ACC) permintaan koreksi salah input kasir.'
-              : `Riwayat transaksi kasir untuk ${user.nama}. Anda dapat melaporkan jika ada salah input.`}
-          </p>
         </div>
 
         <button
@@ -551,7 +542,7 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-[#FCFBF7] border border-[#D8DED6] rounded-2xl p-5 shadow-2xs">
           <span className="text-xs text-[#56635B] font-semibold uppercase tracking-wider">
             Total Omzet Bersih
@@ -561,6 +552,19 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
           </div>
           <span className="text-[11px] text-[#2C6A4E] mt-1 block">
             Pesanan selesai dan terverifikasi
+          </span>
+        </div>
+
+        <div className="bg-[#FCFBF7] border border-[#D8DED6] rounded-2xl p-5 shadow-2xs">
+          <span className="text-xs text-amber-800 font-semibold uppercase tracking-wider flex items-center gap-1.5">
+            <Heart className="w-3.5 h-3.5 fill-amber-600 text-amber-600" />
+            <span>Total Tip / Donasi</span>
+          </span>
+          <div className="font-serif font-bold text-2xl sm:text-3xl text-amber-900 mt-2 font-mono">
+            {formatRupiah(totalTip)}
+          </div>
+          <span className="text-[11px] text-amber-700/80 mt-1 block">
+            Dari kembalian ikhlas pelanggan
           </span>
         </div>
 
@@ -598,9 +602,6 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
               <CreditCard className="w-4 h-4 text-[#1F4034]" />
               Laporan Metode Pembayaran
             </h3>
-            <p className="text-xs text-[#56635B] mt-0.5">
-              Rincian omzet dan volume transaksi berdasarkan metode pembayaran yang digunakan pelanggan.
-            </p>
           </div>
           <div className="text-xs text-[#56635B] font-mono bg-white px-3 py-1 rounded-xl border border-[#D8DED6] self-start sm:self-auto">
             Total Masuk: <b className="text-[#1F4034]">{formatRupiah(totalPenjualan)}</b>
@@ -619,15 +620,10 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
             className="bg-amber-500 transition-all duration-500"
             title={`QRIS: ${paymentBreakdown.QRIS.percent}%`}
           />
-          <div
-            style={{ width: `${paymentBreakdown.Kartu.percent}%` }}
-            className="bg-indigo-600 transition-all duration-500"
-            title={`Kartu: ${paymentBreakdown.Kartu.percent}%`}
-          />
         </div>
 
-        {/* 3 Columns Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {/* 2 Columns Cards: Tunai & QRIS */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
           {/* Tunai */}
           <div className="p-3.5 rounded-xl bg-white border border-[#D8DED6] flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -674,31 +670,6 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
             <div className="text-right">
               <span className="text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
                 {paymentBreakdown.QRIS.percent}%
-              </span>
-            </div>
-          </div>
-
-          {/* Kartu */}
-          <div className="p-3.5 rounded-xl bg-white border border-[#D8DED6] flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold">
-                <CreditCard className="w-5 h-5" />
-              </div>
-              <div>
-                <span className="text-[11px] font-bold text-indigo-800 uppercase tracking-wider block">
-                  Kartu (EDC)
-                </span>
-                <span className="font-serif font-bold text-base text-[#1B2521] font-mono">
-                  {formatRupiah(paymentBreakdown.Kartu.total)}
-                </span>
-                <span className="text-[10px] text-gray-500 block">
-                  {paymentBreakdown.Kartu.count} transaksi
-                </span>
-              </div>
-            </div>
-            <div className="text-right">
-              <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200">
-                {paymentBreakdown.Kartu.percent}%
               </span>
             </div>
           </div>
@@ -823,9 +794,6 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
                 <Flame className="w-4 h-4 text-amber-600" />
                 Pesanan yang Sering Keluar
               </h3>
-              <p className="text-xs text-[#56635B] mt-0.5">
-                Peringkat menu paling banyak dipesan pada periode terpilih
-              </p>
             </div>
             <span className="text-[11px] text-[#1F4034] font-medium bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
               {topOrderedItems.items.length} Menu Teratas
@@ -930,7 +898,13 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
                         </div>
                       </td>
                       <td className="p-3.5 text-right font-serif font-bold text-sm text-[#7C5E2E] font-mono">
-                        {formatRupiah(t.total)}
+                        <div>{formatRupiah(t.total)}</div>
+                        {Boolean(t.tip && t.tip > 0) && (
+                          <div className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200/80 px-1.5 py-0.5 rounded inline-flex items-center gap-1 mt-0.5 font-sans font-semibold">
+                            <Heart className="w-2.5 h-2.5 fill-amber-600 text-amber-600" />
+                            <span>Tip {formatRupiah(t.tip || 0)}</span>
+                          </div>
+                        )}
                       </td>
                       <td className="p-3.5">
                         <span className="px-2 py-0.5 rounded-md bg-[#1F4034]/5 text-[#1F4034] font-semibold text-[11px]">
@@ -1071,8 +1045,8 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
                 <label className="block text-xs font-bold text-[#56635B] uppercase tracking-wider">
                   Pilih Metode Pembayaran:
                 </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['Tunai', 'QRIS', 'Kartu'] as PaymentMethod[]).map(method => (
+                <div className="grid grid-cols-2 gap-2">
+                  {(['Tunai', 'QRIS'] as PaymentMethod[]).map(method => (
                     <button
                       key={method}
                       type="button"
@@ -1085,7 +1059,6 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
                     >
                       {method === 'Tunai' && <Banknote className="w-4 h-4" />}
                       {method === 'QRIS' && <QrCode className="w-4 h-4" />}
-                      {method === 'Kartu' && <CreditCard className="w-4 h-4" />}
                       <span>{method}</span>
                     </button>
                   ))}

@@ -19,7 +19,7 @@ export const OpenBillModal: React.FC<OpenBillModalProps> = ({
   const [namaPelanggan, setNamaPelanggan] = useState('');
   const [catatan, setCatatan] = useState('');
 
-  const quickCustomerPresets = ['Tamu Reguler', 'Pelanggan Langganan', 'Bungkus / Takeaway', 'Rombongan'];
+  const quickCustomerPresets = ['Tamu Reguler', 'Pelanggan Langganan', 'Rombongan'];
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,7 +69,7 @@ export const OpenBillModal: React.FC<OpenBillModalProps> = ({
               autoFocus
               value={namaPelanggan}
               onChange={e => setNamaPelanggan(e.target.value)}
-              placeholder="Ketik nama pelanggan (misal: Pak Dimas, Bu Maya, Tamu 1)..."
+              placeholder="Nama pelanggan atau meja..."
               className="w-full bg-white border border-[#D8DED6] rounded-xl px-3.5 py-2.5 text-sm font-semibold text-[#1B2521] focus:border-[#1F4034] outline-none shadow-2xs"
               required
             />
